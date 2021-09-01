@@ -32,4 +32,16 @@ public class GalleryFragment extends Fragment {
         });
         return root;
     }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        requireActivity().findViewById(R.id.button_compass).setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        requireActivity().findViewById(R.id.button_compass).setVisibility(View.GONE);
+    }
 }
