@@ -16,4 +16,10 @@
     <string name="apply">APPLY</string>
     <string name="hostname_empty">Hostname is empty</string>
     <string name="port_outrange">Port should be 1~65535</string>
+    <string name="dns_not_working">DNS not working</string>
+    <string name="unknown_host">Unknown Host</string>
+    <string name="server_no_response">Server no response</string>
+    <string name="packet_loss_by_percent">Packet loss:%d%%</string>
+    <string name="server_status_fine">Server status fine</string>
+    <string name="system_network_failure">System network failure</string>
 </resources>
