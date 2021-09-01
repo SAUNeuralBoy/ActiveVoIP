@@ -10,4 +10,10 @@
     <string name="menu_home">Home</string>
     <string name="menu_gallery">Gallery</string>
     <string name="menu_slideshow">Slideshow</string>
+    <string name="hostname">hostname:</string>
+    <string name="port">port:</string>
+    <string name="test">TEST</string>
+    <string name="apply">APPLY</string>
+    <string name="hostname_empty">Hostname is empty</string>
+    <string name="port_outrange">Port should be 1~65535</string>
 </resources>
