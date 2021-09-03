@@ -79,9 +79,7 @@ public class SlideshowFragment extends Fragment {
             UI.makeSnackBar(view,getString(R.string.uuid_set));
         });
         view.findViewById(R.id.button_rollback_uuid).setOnClickListener(v -> inputUUID.setText(sp.getUUID64()));
-        view.findViewById(R.id.button_generate_uuid).setOnClickListener(v-> {
-            inputUUID.setText(Crypto.to64(Crypto.randomUUID().getBytes()));
-        });
+        view.findViewById(R.id.button_generate_uuid).setOnClickListener(v-> inputUUID.setText(Crypto.to64(Crypto.randomUUID().getBytes())));
         return view;
     }
 }
