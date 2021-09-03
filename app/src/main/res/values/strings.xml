@@ -22,8 +22,15 @@
     <string name="packet_loss_by_percent">Packet loss:%d%%</string>
     <string name="server_status_fine">Server status fine</string>
     <string name="system_network_failure">System network failure</string>
-    <string name="from_contact">CONTACT</string>
+    <string name="from_contact">GENERATE FROM CONTACT NAME</string>
     <string name="apply_and_save"><![CDATA[APPLY&SAVE]]></string>
     <string name="uuid">UUID</string>
     <string name="copy">Copy</string>
+    <string name="rollback_changes">Rollback Changes</string>
+    <string name="random_generate">Random Generate</string>
+    <string name="confirm">Confirm</string>
+    <string name="contact_input_title">From Contact Name</string>
+    <string name="contact_empty">Contact name is empty</string>
+    <string name="copied">UUID copied to the clipboard</string>
+    <string name="uuid_set">UUID set</string>
 </resources>
