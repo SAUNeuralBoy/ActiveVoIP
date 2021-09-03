@@ -25,4 +25,5 @@
     <string name="from_contact">CONTACT</string>
     <string name="apply_and_save"><![CDATA[APPLY&SAVE]]></string>
     <string name="uuid">UUID</string>
+    <string name="copy">Copy</string>
 </resources>
