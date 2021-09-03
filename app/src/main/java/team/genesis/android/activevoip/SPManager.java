@@ -31,6 +31,9 @@ public class SPManager {
             System.exit(0);
         }
     }
+    public static SPManager getManager(Context context){
+        return new SPManager(context);
+    }
     public void commit(){
         editor.commit();
     }
@@ -53,8 +56,27 @@ public class SPManager {
     public void setUUID(UUID uuid){
         setUUID(Crypto.to64(uuid.getBytes()));
     }
+    public String getHostname(){
+        return sp.getString(keyHostname,"");
+    }
+    public void setHostname(String hostname){
+        editor.putString(keyHostname,hostname);
+    }
+    public int getPort(){
+        int port = sp.getInt(keyPort,-1);
+        if(port==-1){
+            setPort(10113);
+            commit();
+            return 10113;
+        }
+        return port;
+    }
+    public void setPort(int port){
+        editor.putInt(keyPort,port);
+    }
     private static final String sharedPrefsFile = "settings.bin";
     private static final String keystoreAlias = "keystore_preference";
     private static final String keyUUID = "key_uuid";
-
+    private static final String keyHostname = "key_hostname";
+    private static final String keyPort = "key_port";
 }

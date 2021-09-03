@@ -33,4 +33,5 @@
     <string name="contact_empty">Contact name is empty</string>
     <string name="copied">UUID copied to the clipboard</string>
     <string name="uuid_set">UUID set</string>
+    <string name="host_set">Host set</string>
 </resources>

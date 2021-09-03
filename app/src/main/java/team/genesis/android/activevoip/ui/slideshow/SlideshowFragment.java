@@ -49,7 +49,7 @@ public class SlideshowFragment extends Fragment {
 
         EditText inputUUID = view.findViewById(R.id.input_uuid);
 
-        SPManager sp = new SPManager(getContext());
+        SPManager sp = SPManager.getManager(getContext());
         inputUUID.setText(sp.getUUID64());
 
         view.findViewById(R.id.button_input_contact_name).setOnClickListener(v -> {

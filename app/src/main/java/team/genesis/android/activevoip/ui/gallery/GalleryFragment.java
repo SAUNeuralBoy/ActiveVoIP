@@ -19,6 +19,8 @@ import com.google.android.material.snackbar.Snackbar;
 import java.io.IOException;
 
 import team.genesis.android.activevoip.R;
+import team.genesis.android.activevoip.SPManager;
+import team.genesis.android.activevoip.UI;
 import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
 
@@ -31,15 +33,23 @@ public class GalleryFragment extends Fragment {
         galleryViewModel =
                 new ViewModelProvider(this).get(GalleryViewModel.class);
         View view = inflater.inflate(R.layout.fragment_gallery, container, false);
+
+        EditText inputHostname = view.findViewById(R.id.input_hostname);
+        EditText inputPort = view.findViewById(R.id.input_port);
+
+        SPManager sp = SPManager.getManager(getContext());
+        inputHostname.setText(sp.getHostname());
+        inputPort.setText(String.valueOf(sp.getPort()));
+
         view.findViewById(R.id.button_test).setOnClickListener(v -> {
             TextView status = view.findViewById(R.id.status_host);
             status.setTextColor(ContextCompat.getColor(requireContext(),R.color.error_color));
-            String hostName = ((EditText)view.findViewById(R.id.input_hostname)).getText().toString().toLowerCase();
+            String hostName = inputHostname.getText().toString().toLowerCase();
             if(hostName.equals("")){
                 status.setText(R.string.hostname_empty);
                 return;
             }
-            int port = Integer.valueOf(((EditText)view.findViewById(R.id.input_port)).getText().toString(),10);
+            int port = Integer.valueOf(inputPort.getText().toString(),10);
             if(port<1||port>65535){
                 status.setText(R.string.port_outrange);
                 return;
@@ -72,6 +82,23 @@ public class GalleryFragment extends Fragment {
                 status.setText(R.string.server_status_fine);
                 status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
             }
+        });
+        view.findViewById(R.id.button_apply).setOnClickListener(v -> {
+            String hostName = inputHostname.getText().toString().toLowerCase();
+            if(hostName.equals("")){
+                UI.makeSnackBar(view,getString(R.string.hostname_empty));
+                return;
+            }
+            int port = Integer.valueOf(inputPort.getText().toString(),10);
+            if(port<1||port>65535){
+                UI.makeSnackBar(view,getString(R.string.port_outrange));
+                return;
+            }
+            sp.setHostname(hostName);
+            sp.setPort(port);
+            sp.commit();
+            UI.makeSnackBar(view,getString(R.string.host_set));
+
         });
         return view;
     }
