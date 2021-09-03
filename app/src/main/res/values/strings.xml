@@ -22,4 +22,7 @@
     <string name="packet_loss_by_percent">Packet loss:%d%%</string>
     <string name="server_status_fine">Server status fine</string>
     <string name="system_network_failure">System network failure</string>
+    <string name="from_contact">CONTACT</string>
+    <string name="apply_and_save"><![CDATA[APPLY&SAVE]]></string>
+    <string name="uuid">UUID</string>
 </resources>
