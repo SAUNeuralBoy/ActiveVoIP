@@ -1,6 +1,7 @@
 package team.genesis.android.activevoip;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
@@ -17,6 +18,16 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.SocketException;
+
+import team.genesis.data.UUID;
+import team.genesis.network.DNSLookupThread;
+import team.genesis.tunnels.UDPActiveDatagramTunnel;
+
+import static java.lang.System.exit;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -50,6 +61,29 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.button_compass).setOnClickListener(v -> {
             navController.navigate(R.id.nav_gallery);
         });
+        sp = SPManager.getManager(this);
+        host = InetAddress.getLoopbackAddress();
+        try {
+            writeTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
+            listenTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
+        } catch (SocketException e) {
+            e.printStackTrace();
+            exit(0);
+        }
+        Handler aliveHandler = new Handler();
+        Runnable keepsAlive = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    listenTunnel.keepAlive();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }finally {
+                    aliveHandler.postDelayed(this,5000);
+                }
+            }
+        };
+        aliveHandler.postDelayed(keepsAlive,5000);
     }
 
     @Override
@@ -64,5 +98,43 @@ public class MainActivity extends AppCompatActivity {
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
         return NavigationUI.navigateUp(navController, mAppBarConfiguration)
                 || super.onSupportNavigateUp();
+    }
+    private SPManager sp;
+    private UDPActiveDatagramTunnel writeTunnel;
+    private UDPActiveDatagramTunnel listenTunnel;
+    private InetAddress host;
+    public void setHost(InetAddress hostAddr,int port){
+        writeTunnel.setHost(hostAddr, port);
+        listenTunnel.setHost(hostAddr, port);
+    }
+    public void setHost(InetAddress hostAddr){
+        writeTunnel.setHost(hostAddr);
+        listenTunnel.setHost(hostAddr);
+    }
+    public void setUUID(UUID uuid){
+        writeTunnel.setSrc(uuid);
+        listenTunnel.setSrc(uuid);
+    }
+    public void write(byte[] data, UUID dst) throws IOException {
+        writeTunnel.send(data,dst);
+    }
+    public void update(){
+        setUUID(sp.getUUID());
+        setHost(host,sp.getPort());
+        updateDNS();
+    }
+    public boolean updateDNS(){
+        DNSLookupThread dns = new DNSLookupThread(sp.getHostname());
+        dns.start();
+        try {
+            dns.join(1000);
+        } catch (InterruptedException ignored) {
+        }
+        if(dns.getIP()==null)   return false;
+        if(dns.getIP()!=host){
+            host=dns.getIP();
+            setHost(host);
+        }
+        return true;
     }
 }

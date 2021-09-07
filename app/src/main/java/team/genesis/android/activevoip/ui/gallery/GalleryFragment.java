@@ -18,6 +18,7 @@ import com.google.android.material.snackbar.Snackbar;
 
 import java.io.IOException;
 
+import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.SPManager;
 import team.genesis.android.activevoip.UI;
@@ -37,7 +38,7 @@ public class GalleryFragment extends Fragment {
         EditText inputHostname = view.findViewById(R.id.input_hostname);
         EditText inputPort = view.findViewById(R.id.input_port);
 
-        SPManager sp = SPManager.getManager(getContext());
+        SPManager sp = SPManager.getManager((MainActivity) getActivity());
         inputHostname.setText(sp.getHostname());
         inputPort.setText(String.valueOf(sp.getPort()));
 

@@ -32,6 +32,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
 import team.genesis.android.activevoip.Crypto;
+import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.SPManager;
 import team.genesis.android.activevoip.UI;
@@ -49,7 +50,7 @@ public class SlideshowFragment extends Fragment {
 
         EditText inputUUID = view.findViewById(R.id.input_uuid);
 
-        SPManager sp = SPManager.getManager(getContext());
+        SPManager sp = SPManager.getManager((MainActivity) getActivity());
         inputUUID.setText(sp.getUUID64());
 
         view.findViewById(R.id.button_input_contact_name).setOnClickListener(v -> {

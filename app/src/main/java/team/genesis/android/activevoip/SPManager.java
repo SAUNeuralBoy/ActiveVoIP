@@ -14,12 +14,14 @@ import team.genesis.data.UUID;
 public class SPManager {
     private SharedPreferences sp;
     private SharedPreferences.Editor editor;
-    public SPManager(Context context){
+    private final MainActivity mainActivity;
+    public SPManager(MainActivity activity){
+        mainActivity = activity;
         try {
             sp = EncryptedSharedPreferences.create(
                     sharedPrefsFile,
                     keystoreAlias,
-                    context,
+                    activity.getBaseContext(),
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
@@ -31,11 +33,12 @@ public class SPManager {
             System.exit(0);
         }
     }
-    public static SPManager getManager(Context context){
-        return new SPManager(context);
+    public static SPManager getManager(MainActivity activity){
+        return new SPManager(activity);
     }
     public void commit(){
         editor.commit();
+        mainActivity.update();
     }
     public UUID getUUID(){
         String id64 = getUUID64();

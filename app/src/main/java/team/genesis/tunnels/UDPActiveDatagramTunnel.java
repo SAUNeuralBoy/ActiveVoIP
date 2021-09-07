@@ -63,8 +63,11 @@ public class UDPActiveDatagramTunnel extends ActiveDatagramTunnel implements Run
     public void setSrc(UUID src){
         this.src = src;
     }
-    public void setHost(InetAddress hostAddr,int port){
+    public void setHost(InetAddress hostAddr){
         this.hostAddr = hostAddr;
+    }
+    public void setHost(InetAddress hostAddr,int port){
+        setHost(hostAddr);
         this.port = port;
     }
     private void sendPacket(byte[] pack) throws IOException {
