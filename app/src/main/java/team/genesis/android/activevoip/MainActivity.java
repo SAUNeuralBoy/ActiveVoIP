@@ -2,6 +2,7 @@ package team.genesis.android.activevoip;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
@@ -85,7 +86,9 @@ public class MainActivity extends AppCompatActivity {
         };
         aliveHandler.postDelayed(keepsAlive,5000);
 
-        Handler recvHandler = new Handler();
+        HandlerThread recvThread = new HandlerThread("recv");
+        recvThread.start();
+        Handler recvHandler = new Handler(recvThread.getLooper());
         Runnable recv = new Runnable() {
             @Override
             public void run() {
