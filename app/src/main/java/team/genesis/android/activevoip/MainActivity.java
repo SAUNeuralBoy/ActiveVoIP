@@ -84,6 +84,22 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         aliveHandler.postDelayed(keepsAlive,5000);
+
+        Handler recvHandler = new Handler();
+        Runnable recv = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    listenTunnel.recv();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    recvHandler.postDelayed(this,100);
+                    return;
+                }
+                recvHandler.post(this);
+            }
+        };
+        recvHandler.post(recv);
     }
 
     @Override
