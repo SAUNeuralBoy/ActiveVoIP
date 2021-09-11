@@ -1,5 +1,6 @@
 package team.genesis.android.activevoip;
 
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -27,6 +28,7 @@ import java.net.SocketException;
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
+import team.genesis.tunnels.active.datagram.udp.UDPProbe;
 
 import static java.lang.System.exit;
 
@@ -64,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
         });
         sp = SPManager.getManager(this);
         host = InetAddress.getLoopbackAddress();
+        port = sp.getPort();
         try {
             writeTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
             listenTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
@@ -71,7 +74,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             exit(0);
         }
-        Handler aliveHandler = new Handler();
+        Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {
             @Override
             public void run() {
@@ -80,15 +83,13 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }finally {
-                    aliveHandler.postDelayed(this,5000);
+                    uiHandler.postDelayed(this,5000);
                 }
             }
         };
-        aliveHandler.postDelayed(keepsAlive,5000);
+        uiHandler.postDelayed(keepsAlive,5000);
 
-        HandlerThread recvThread = new HandlerThread("recv");
-        recvThread.start();
-        Handler recvHandler = new Handler(recvThread.getLooper());
+        Handler recvHandler = getCycledHandler("recv");
         Runnable recv = new Runnable() {
             @Override
             public void run() {
@@ -104,9 +105,7 @@ public class MainActivity extends AppCompatActivity {
         };
         recvHandler.post(recv);
 
-        HandlerThread dnsUpdateThread = new HandlerThread("dns");
-        dnsUpdateThread.start();
-        Handler dnsHandler = new Handler(dnsUpdateThread.getLooper());
+        Handler dnsHandler = getCycledHandler("dns");
         Runnable dnsUpdate = new Runnable() {
             @Override
             public void run() {
@@ -116,6 +115,37 @@ public class MainActivity extends AppCompatActivity {
         };
         dnsHandler.post(dnsUpdate);
 
+        Handler probeHandler = getCycledHandler("probe");
+        UDPProbe probe;
+        try {
+            probe = UDPActiveDatagramTunnel.getProbe(1000);
+        } catch (SocketException e) {
+            e.printStackTrace();
+            exit(0);
+            return;
+        }
+        Runnable probeHost = new Runnable() {
+            @Override
+            public void run() {
+                int color;
+                try {
+                    if (probe.probe(host, port, 1) == 1) {
+                        color = R.color.fine_color;
+                    } else {
+                        if (probe.probe(host, port, 10) > 0)
+                            color = R.color.distrubing_color;
+                        else
+                            color = R.color.error_color;
+                    }
+                    uiHandler.post(() -> ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color))));
+                }catch (IOException e){
+                    e.printStackTrace();
+                }finally {
+                    probeHandler.postDelayed(this,2500);
+                }
+            }
+        };
+        probeHandler.postDelayed(probeHost,5000);
     }
 
     @Override
@@ -135,11 +165,15 @@ public class MainActivity extends AppCompatActivity {
     private UDPActiveDatagramTunnel writeTunnel;
     private UDPActiveDatagramTunnel listenTunnel;
     private InetAddress host;
+    private int port;
     public void setHost(InetAddress hostAddr,int port){
+        host = hostAddr;
+        this.port = port;
         writeTunnel.setHost(hostAddr, port);
         listenTunnel.setHost(hostAddr, port);
     }
     public void setHost(InetAddress hostAddr){
+        host = hostAddr;
         writeTunnel.setHost(hostAddr);
         listenTunnel.setHost(hostAddr);
     }
@@ -164,9 +198,13 @@ public class MainActivity extends AppCompatActivity {
         }
         if(dns.getIP()==null)   return false;
         if(dns.getIP()!=host){
-            host=dns.getIP();
-            setHost(host);
+            setHost(dns.getIP());
         }
         return true;
+    }
+    private Handler getCycledHandler(String name){
+        HandlerThread thread = new HandlerThread(name);
+        thread.start();
+        return new Handler(thread.getLooper());
     }
 }
