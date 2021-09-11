@@ -103,6 +103,19 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         recvHandler.post(recv);
+
+        HandlerThread dnsUpdateThread = new HandlerThread("dns");
+        dnsUpdateThread.start();
+        Handler dnsHandler = new Handler(dnsUpdateThread.getLooper());
+        Runnable dnsUpdate = new Runnable() {
+            @Override
+            public void run() {
+                updateDNS();
+                dnsHandler.postDelayed(this,30000);
+            }
+        };
+        dnsHandler.post(dnsUpdate);
+
     }
 
     @Override
