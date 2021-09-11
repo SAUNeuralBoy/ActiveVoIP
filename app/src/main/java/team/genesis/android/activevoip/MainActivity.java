@@ -4,6 +4,8 @@ import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
@@ -24,9 +26,22 @@ import androidx.appcompat.widget.Toolbar;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
+
+import javax.crypto.KeyAgreement;
 
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
+import team.genesis.tunnels.ActiveDatagramTunnel;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
 import team.genesis.tunnels.active.datagram.udp.UDPProbe;
 
@@ -43,13 +58,8 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         FloatingActionButton fab = findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
+        fab.setOnClickListener(view -> Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                .setAction("Action", null).show());
         DrawerLayout drawer = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
         // Passing each menu ID as a set of Ids because each
@@ -61,9 +71,7 @@ public class MainActivity extends AppCompatActivity {
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
-        findViewById(R.id.button_compass).setOnClickListener(v -> {
-            navController.navigate(R.id.nav_gallery);
-        });
+        findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
         sp = SPManager.getManager(this);
         host = InetAddress.getLoopbackAddress();
         port = sp.getPort();
@@ -93,13 +101,52 @@ public class MainActivity extends AppCompatActivity {
         Runnable recv = new Runnable() {
             @Override
             public void run() {
+                ActiveDatagramTunnel.Incoming msg;
                 try {
-                    listenTunnel.recv();
+                    msg = listenTunnel.recv();
                 } catch (IOException e) {
                     e.printStackTrace();
                     recvHandler.postDelayed(this,100);
                     return;
                 }
+
+                if(msg.data.length==91){
+                    KeyPairGenerator kpg;
+                    KeyFactory kf;
+                    KeyAgreement ka;
+                    KeyPair kp;
+                    try {
+                        kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");
+                        kpg.initialize(new KeyGenParameterSpec.Builder(
+                                "ECDH_KEY",
+                                KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                                .setDigests(KeyProperties.DIGEST_SHA256,
+                                        KeyProperties.DIGEST_SHA512)
+                                .build());
+                        kf = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");
+                        ka = KeyAgreement.getInstance("ECDH");
+                        kp = kpg.generateKeyPair();
+                        ka.init(kp.getPrivate());
+                    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException | InvalidKeyException e) {
+                        e.printStackTrace();
+                        exit(0);
+                        return;
+                    }
+                    X509EncodedKeySpec pkSpec = new X509EncodedKeySpec(msg.data);
+                    try {
+                        PublicKey otherPublicKey = kf.generatePublic(pkSpec);
+                        ka.doPhase(otherPublicKey, true);
+                    } catch (InvalidKeySpecException | InvalidKeyException e) {
+                        recvHandler.post(this);
+                        return;
+                    }
+                    byte[] sharedSecret = ka.generateSecret();
+                    byte[] rePk = new byte[91+91];
+                    System.arraycopy(kp.getPublic().getEncoded(),0,rePk,0,91);
+                    System.arraycopy(msg.data,0,rePk,91,91);
+                    write(rePk,msg.src);
+                }
+
                 recvHandler.post(this);
             }
         };
@@ -181,8 +228,12 @@ public class MainActivity extends AppCompatActivity {
         writeTunnel.setSrc(uuid);
         listenTunnel.setSrc(uuid);
     }
-    public void write(byte[] data, UUID dst) throws IOException {
-        writeTunnel.send(data,dst);
+    public void write(byte[] data, UUID dst){
+        try {
+            writeTunnel.send(data,dst);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
     public void update(){
         setUUID(sp.getUUID());
