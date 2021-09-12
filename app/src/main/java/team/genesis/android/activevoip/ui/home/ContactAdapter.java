@@ -27,6 +27,16 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         Contact contact = contactList.get(position);
         holder.contactAlias.setText(contact.alias);
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
+        switch (contact.status){
+            case READY:
+                //todo:onclick
+                holder.buttonCall.setVisibility(View.VISIBLE);
+                break;
+            case CONFIRM_WAIT:
+                holder.contactStatus.setText(R.string.wait_for_confirm);
+                holder.contactStatus.setVisibility(View.VISIBLE);
+                break;
+        }
     }
 
     @Override
@@ -41,6 +51,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
     static class ViewHolder extends RecyclerView.ViewHolder{
         TextView contactAlias;
         TextView contactUUID;
+        TextView contactStatus;
         ImageButton buttonCall;
 
         public ViewHolder (View view)
@@ -49,6 +60,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             contactAlias = view.findViewById(R.id.contact_alias);
             contactUUID = view.findViewById(R.id.contact_uuid);
             buttonCall = view.findViewById(R.id.button_call_contact);
+            contactStatus = view.findViewById(R.id.contact_status);
         }
 
 
