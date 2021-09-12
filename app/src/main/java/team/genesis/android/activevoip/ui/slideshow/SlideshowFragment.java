@@ -58,15 +58,11 @@ public class SlideshowFragment extends Fragment {
             final EditText input = new EditText(getContext());
             builder.setTitle(getString(R.string.contact_input_title)).setIcon(android.R.drawable.ic_dialog_info).setView(input);
             builder.setPositiveButton(R.string.confirm, (dialog, which) -> {
-                try {
-                    if(input.getText().toString().equals("")){
-                        UI.makeSnackBar(view,getString(R.string.contact_empty));
-                        return;
-                    }
-                    inputUUID.setText(Crypto.to64(MessageDigest.getInstance("MD5").digest(input.getText().toString().getBytes(StandardCharsets.UTF_8))));
-                } catch (NoSuchAlgorithmException e) {
-                    e.printStackTrace();
+                if(input.getText().toString().equals("")){
+                    UI.makeSnackBar(view,getString(R.string.contact_empty));
+                    return;
                 }
+                inputUUID.setText(Crypto.to64(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8))));
             });
             builder.show();
         });
