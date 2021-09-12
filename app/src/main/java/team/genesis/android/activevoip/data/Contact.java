@@ -1,5 +1,7 @@
 package team.genesis.android.activevoip.data;
 
+import java.nio.ByteBuffer;
+
 import team.genesis.data.UUID;
 
 public class Contact {
@@ -8,5 +10,8 @@ public class Contact {
     public Status status;
     public enum Status{
         CONFIRM_WAIT,READY
+    }
+    public byte[] getBytes(){
+        
     }
 }
