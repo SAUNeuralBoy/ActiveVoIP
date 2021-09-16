@@ -41,6 +41,9 @@ import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.KeyAgreement;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
 import team.genesis.android.activevoip.ui.home.HomeViewModel;
 import team.genesis.data.UUID;
@@ -131,7 +134,15 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 uiHandler.post(()->{
+                    ByteBuf buf = Unpooled.copiedBuffer(msg.data);
+                    switch (Ctrl.values()[buf.readInt()]){
+                        case PAIR:
 
+                            break;
+                        case PAIR_RESPONSE:
+
+                            break;
+                    }
                 });
 
                 recvHandler.post(this);
