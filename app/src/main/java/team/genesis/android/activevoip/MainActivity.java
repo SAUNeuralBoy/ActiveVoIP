@@ -15,6 +15,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
@@ -39,6 +41,8 @@ import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.KeyAgreement;
 
+import team.genesis.android.activevoip.ui.MainViewModel;
+import team.genesis.android.activevoip.ui.home.HomeViewModel;
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.ActiveDatagramTunnel;
@@ -50,6 +54,8 @@ import static java.lang.System.exit;
 public class MainActivity extends AppCompatActivity {
 
     private AppBarConfiguration mAppBarConfiguration;
+
+    private MainViewModel viewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +88,21 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             exit(0);
         }
+
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        viewModel.getCompassColor().observe(this, compassColor -> {
+            int color = R.color.error_color;
+            switch (compassColor){
+                case FINE:
+                    color = R.color.fine_color;
+                    break;
+                case DISTURBING:
+                    color = R.color.distrubing_color;
+                    break;
+            }
+            ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
+        });
+
         Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {
             @Override
@@ -140,17 +161,18 @@ public class MainActivity extends AppCompatActivity {
         Runnable probeHost = new Runnable() {
             @Override
             public void run() {
-                int color;
+                MainViewModel.CompassColor color;
                 try {
                     if (probe.probe(host, port, 1) == 1) {
-                        color = R.color.fine_color;
+                        color = MainViewModel.CompassColor.FINE;
                     } else {
                         if (probe.probe(host, port, 10) > 0)
-                            color = R.color.distrubing_color;
+                            color = MainViewModel.CompassColor.DISTURBING;
                         else
-                            color = R.color.error_color;
+                            color = MainViewModel.CompassColor.ERROR;
                     }
-                    uiHandler.post(() -> ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color))));
+                    if(viewModel.getCompassColor().getValue()!=color)
+                        viewModel.getCompassColor().setValue(color);
                 }catch (IOException e){
                     e.printStackTrace();
                 }finally {
@@ -159,6 +181,8 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         probeHandler.postDelayed(probeHost,5000);
+
+
     }
 
     @Override
