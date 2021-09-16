@@ -172,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
                             color = MainViewModel.CompassColor.ERROR;
                     }
                     if(viewModel.getCompassColor().getValue()!=color)
-                        viewModel.getCompassColor().setValue(color);
+                        uiHandler.post(()->viewModel.getCompassColor().setValue(color));
                 }catch (IOException e){
                     e.printStackTrace();
                 }finally {
@@ -180,7 +180,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
-        probeHandler.postDelayed(probeHost,5000);
+        probeHandler.post(probeHost);
 
 
     }
