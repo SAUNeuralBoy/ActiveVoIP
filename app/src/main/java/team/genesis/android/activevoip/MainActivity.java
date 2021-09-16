@@ -109,43 +109,9 @@ public class MainActivity extends AppCompatActivity {
                     recvHandler.postDelayed(this,100);
                     return;
                 }
+                uiHandler.post(()->{
 
-                if(msg.data.length==91){
-                    KeyPairGenerator kpg;
-                    KeyFactory kf;
-                    KeyAgreement ka;
-                    KeyPair kp;
-                    try {
-                        kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");
-                        kpg.initialize(new KeyGenParameterSpec.Builder(
-                                "ECDH_KEY",
-                                KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                                .setDigests(KeyProperties.DIGEST_SHA256,
-                                        KeyProperties.DIGEST_SHA512)
-                                .build());
-                        kf = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");
-                        ka = KeyAgreement.getInstance("ECDH");
-                        kp = kpg.generateKeyPair();
-                        ka.init(kp.getPrivate());
-                    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException | InvalidKeyException e) {
-                        e.printStackTrace();
-                        exit(0);
-                        return;
-                    }
-                    X509EncodedKeySpec pkSpec = new X509EncodedKeySpec(msg.data);
-                    try {
-                        PublicKey otherPublicKey = kf.generatePublic(pkSpec);
-                        ka.doPhase(otherPublicKey, true);
-                    } catch (InvalidKeySpecException | InvalidKeyException e) {
-                        recvHandler.post(this);
-                        return;
-                    }
-                    byte[] sharedSecret = ka.generateSecret();
-                    byte[] rePk = new byte[91+91];
-                    System.arraycopy(kp.getPublic().getEncoded(),0,rePk,0,91);
-                    System.arraycopy(msg.data,0,rePk,91,91);
-                    write(rePk,msg.src);
-                }
+                });
 
                 recvHandler.post(this);
             }
