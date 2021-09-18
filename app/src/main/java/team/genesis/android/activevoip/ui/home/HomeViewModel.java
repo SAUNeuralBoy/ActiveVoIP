@@ -11,7 +11,6 @@ import team.genesis.android.activevoip.db.ContactEntity;
 public class HomeViewModel extends ViewModel {
 
     private MutableLiveData<String> mText;
-    private LiveData<List<ContactEntity>> mContacts;
 
     public HomeViewModel() {
         mText = new MutableLiveData<>();
@@ -20,11 +19,5 @@ public class HomeViewModel extends ViewModel {
 
     public LiveData<String> getText() {
         return mText;
-    }
-    public LiveData<List<ContactEntity>> getContacts(){
-        return mContacts;
-    }
-    public void setContacts(LiveData<List<ContactEntity>> contacts){
-        mContacts = contacts;
     }
 }

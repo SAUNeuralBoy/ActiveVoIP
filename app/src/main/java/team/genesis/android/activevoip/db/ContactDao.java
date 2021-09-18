@@ -23,5 +23,5 @@ public interface ContactDao {
     @Query("SELECT * FROM ContactEntity WHERE uuidHash = :sha256")
     ContactEntity[] findContactByHash(byte[] sha256);
     @Delete
-    void deleteContactByHash(byte[] sha256);
+    void deleteContact(ContactEntity... contacts);
 }

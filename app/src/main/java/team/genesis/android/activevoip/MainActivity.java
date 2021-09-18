@@ -123,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
 
         contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
         dao = contactDB.getDao();
-        new ViewModelProvider(this).get(HomeViewModel.class).setContacts(dao.getAllContactsLive());
 
         Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {
@@ -187,7 +186,7 @@ public class MainActivity extends AppCompatActivity {
                             try {
                                 contact = result[0].getContact();
                             } catch (Crypto.DecryptException e) {
-                                ContactDB.deleteContactByUUID(dao,msg.src);
+                                dao.deleteContact(result[0]);
                                 return;
                             }
                             if(contact.status!= Contact.Status.PAIR_SENT)   return;
@@ -217,7 +216,7 @@ public class MainActivity extends AppCompatActivity {
                             try {
                                 contact = result[0].getContact();
                             } catch (Crypto.DecryptException e) {
-                                ContactDB.deleteContactByUUID(dao,msg.src);
+                                dao.deleteContact(result[0]);
                                 return;
                             }
                             if(contact.status== Contact.Status.PAIR_RCVD){

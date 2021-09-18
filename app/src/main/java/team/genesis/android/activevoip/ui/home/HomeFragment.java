@@ -1,5 +1,6 @@
 package team.genesis.android.activevoip.ui.home;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,15 +14,19 @@ import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.room.Room;
 
 import java.util.List;
 
 import team.genesis.android.activevoip.R;
+import team.genesis.android.activevoip.db.ContactDB;
+import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
 
 public class HomeFragment extends Fragment {
 
     private HomeViewModel homeViewModel;
+    private ContactDao dao;
 
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
@@ -33,16 +38,17 @@ public class HomeFragment extends Fragment {
         listContact.setLayoutManager(new LinearLayoutManager(getContext()));
         ContactAdapter adapter = new ContactAdapter(null);
         listContact.setAdapter(adapter);
-        homeViewModel.getText().observe(getViewLifecycleOwner(), new Observer<String>() {
-            @Override
-            public void onChanged(@Nullable String s) {
-                textView.setText(s);
-            }
-        });
-        homeViewModel.getContacts().observe(getViewLifecycleOwner(), contactEntities -> {
+        homeViewModel.getText().observe(getViewLifecycleOwner(), textView::setText);
+        dao.getAllContactsLive().observe(getViewLifecycleOwner(), contactEntities -> {
             adapter.setContactList(contactEntities);
             adapter.notifyDataSetChanged();
         });
         return root;
+    }
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        dao = ((ContactDB) Room.databaseBuilder(context, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
     }
 }

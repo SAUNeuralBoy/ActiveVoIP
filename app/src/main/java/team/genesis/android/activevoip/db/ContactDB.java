@@ -7,13 +7,10 @@ import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.data.Contact;
 import team.genesis.data.UUID;
 
-@Database(entities = Contact.class,version = 1)
+@Database(entities = ContactEntity.class,version = 1,exportSchema = false)
 public abstract class ContactDB extends RoomDatabase {
     public abstract ContactDao getDao();
     public static ContactEntity[] findContactByUUID(ContactDao dao,UUID uuid){
         return dao.findContactByHash(Crypto.sha256(uuid.getBytes()));
-    }
-    public static void deleteContactByUUID(ContactDao dao,UUID uuid){
-        dao.deleteContactByHash(Crypto.sha256(uuid.getBytes()));
     }
 }
