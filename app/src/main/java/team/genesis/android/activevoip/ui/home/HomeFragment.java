@@ -31,7 +31,7 @@ public class HomeFragment extends Fragment {
         final TextView textView = root.findViewById(R.id.text_home);
         final RecyclerView listContact = root.findViewById(R.id.list_contact);
         listContact.setLayoutManager(new LinearLayoutManager(getContext()));
-        ContactAdapter adapter = new ContactAdapter(homeViewModel.getContacts().getValue());
+        ContactAdapter adapter = new ContactAdapter(null);
         listContact.setAdapter(adapter);
         homeViewModel.getText().observe(getViewLifecycleOwner(), new Observer<String>() {
             @Override
