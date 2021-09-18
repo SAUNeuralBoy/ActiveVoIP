@@ -50,6 +50,15 @@ public class Crypto {
         }
         return null;
     }
+    public static byte[] sha256(byte[] data){
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(data);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            exit(0);
+        }
+        return null;
+    }
     public static SecretKey getOrCreate(String alias){
         KeyStore keyStore;
         try {

@@ -12,6 +12,11 @@ public class Contact {
     public UUID uuid;
     public Status status;
     public enum Status{
-        CONFIRM_WAIT,READY
+        PAIR_SENT,PAIR_RCVD,CONFIRM_WAIT,READY
+    }
+    public byte[] ourPk;
+    public byte[] otherPk;
+    public Contact(){
+        otherPk = new byte[91];
     }
 }

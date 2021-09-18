@@ -24,8 +24,11 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.room.Room;
+import androidx.room.RoomDatabase;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.security.InvalidAlgorithmParameterException;
@@ -33,16 +36,24 @@ import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PublicKey;
+import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import team.genesis.android.activevoip.data.Contact;
+import team.genesis.android.activevoip.db.ContactDB;
+import team.genesis.android.activevoip.db.ContactDao;
+import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
 import team.genesis.android.activevoip.ui.home.HomeViewModel;
@@ -59,6 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private AppBarConfiguration mAppBarConfiguration;
 
     private MainViewModel viewModel;
+
+    private ContactDB contactDB;
+    private ContactDao dao;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,6 +120,9 @@ public class MainActivity extends AppCompatActivity {
             ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
         });
 
+        contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
+        dao = contactDB.getDao();
+
         Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {
             @Override
@@ -133,16 +150,85 @@ public class MainActivity extends AppCompatActivity {
                     recvHandler.postDelayed(this,100);
                     return;
                 }
-                uiHandler.post(()->{
+                uiHandler.post(()->{try {
                     ByteBuf buf = Unpooled.copiedBuffer(msg.data);
-                    switch (Ctrl.values()[buf.readInt()]){
-                        case PAIR:
+                    ByteBuf repBuf = Unpooled.buffer();
+                    switch (Ctrl.values()[buf.readInt()]) {
+                        case PAIR:{
+                            if (buf.readableBytes() < 91) return;
+                            KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+                            kpg.initialize(new KeyGenParameterSpec.Builder(
+                                    Crypto.to64(msg.src.getBytes()),
+                                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                                    .setDigests(KeyProperties.DIGEST_SHA256,
+                                            KeyProperties.DIGEST_SHA512)
+                                    .build());
+                            KeyPair kp = kpg.generateKeyPair();
+                            Contact contact = new Contact();
+                            contact.uuid = msg.src;
+                            contact.ourPk = kp.getPublic().getEncoded();
+                            buf.readBytes(contact.otherPk, 0, 91);
 
-                            break;
-                        case PAIR_RESPONSE:
+                            repBuf.writeInt(Ctrl.PAIR_RESPONSE.ordinal());
+                            repBuf.writeBytes(contact.ourPk);
+                            repBuf.writeBytes(contact.otherPk);
+                            write(repBuf.array(),msg.src);
 
+                            contact.status = Contact.Status.PAIR_RCVD;
+                            dao.insertContact(new ContactEntity(contact));
+                            break;}
+                        case PAIR_RESPONSE:{
+                            if (buf.readableBytes() < 91*2) return;
+                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
+                            if(result==null)    return;
+                            Contact contact;
+                            try {
+                                contact = result[0].getContact();
+                            } catch (Crypto.DecryptException e) {
+                                ContactDB.deleteContactByUUID(dao,msg.src);
+                                return;
+                            }
+                            if(contact.status!= Contact.Status.PAIR_SENT)   return;
+                            buf.readBytes(contact.otherPk,0,91);
+                            byte[] chk = new byte[91];
+                            buf.readBytes(chk,0,91);
+                            if(!Arrays.equals(contact.ourPk,chk))   return;
+                            try {
+                                KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+                                keyStore.load(null);
+                                if (!keyStore.containsAlias(Crypto.to64(msg.src.getBytes())))
+                                    return;
+                            }catch (KeyStoreException | CertificateException | IOException e){
+                                e.printStackTrace();
+                                exit(0);
+                            }
+
+                            repBuf.writeInt(Ctrl.PAIR_ACK.ordinal());
+                            write(repBuf.array(),msg.src);
+                            contact.status = Contact.Status.CONFIRM_WAIT;
+                            dao.insertContact(new ContactEntity(contact));
+                            break;}
+                        case PAIR_ACK:
+                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
+                            if(result==null)    return;
+                            Contact contact;
+                            try {
+                                contact = result[0].getContact();
+                            } catch (Crypto.DecryptException e) {
+                                ContactDB.deleteContactByUUID(dao,msg.src);
+                                return;
+                            }
+                            if(contact.status== Contact.Status.PAIR_RCVD){
+                                contact.status = Contact.Status.CONFIRM_WAIT;
+                                dao.insertContact(new ContactEntity(contact));
+                            }
                             break;
                     }
+                }catch (IndexOutOfBoundsException ignored){}
+                catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+                    e.printStackTrace();
+                    exit(0);
+                }
                 });
 
                 recvHandler.post(this);

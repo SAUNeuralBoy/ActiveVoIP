@@ -14,7 +14,7 @@ public class ContactEntity {
     byte[] uuidHash;
     byte[] encryptedData;
     public ContactEntity(Contact contact){
-        uuidHash = Crypto.md5(contact.uuid.getBytes());
+        uuidHash = Crypto.sha256(contact.uuid.getBytes());
         encryptedData = Crypto.encryptWithMasterKey(new Gson().toJson(contact).getBytes());
     }
     public Contact getContact() throws Crypto.DecryptException {
