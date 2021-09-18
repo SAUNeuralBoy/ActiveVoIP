@@ -45,6 +45,7 @@ import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.crypto.KeyAgreement;
 
@@ -122,6 +123,7 @@ public class MainActivity extends AppCompatActivity {
 
         contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
         dao = contactDB.getDao();
+        new ViewModelProvider(this).get(HomeViewModel.class).setContacts(dao.getAllContactsLive());
 
         Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {

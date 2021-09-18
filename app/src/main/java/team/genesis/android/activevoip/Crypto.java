@@ -59,6 +59,19 @@ public class Crypto {
         }
         return null;
     }
+    public static String bytesToHex(byte[] bytes,String separator){
+        StringBuilder sb = new StringBuilder();
+        for (byte aByte : bytes) {
+            String hex = Integer.toHexString(aByte & 0xFF);
+            if (hex.length() < 2) {
+                sb.append(0);
+            }
+            sb.append(hex);
+            sb.append(separator);
+        }
+        sb.delete(sb.length()-separator.length(),sb.length());
+        return sb.toString();
+    }
     public static SecretKey getOrCreate(String alias){
         KeyStore keyStore;
         try {

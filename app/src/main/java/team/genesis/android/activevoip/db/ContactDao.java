@@ -1,5 +1,6 @@
 package team.genesis.android.activevoip.db;
 
+import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
 import androidx.room.Delete;
 import androidx.room.Insert;
@@ -17,6 +18,8 @@ public interface ContactDao {
     void insertContact(ContactEntity... contacts);
     @Query("SELECT * FROM ContactEntity")
     List<ContactEntity> getAllContacts();
+    @Query("SELECT * FROM ContactEntity")
+    LiveData<List<ContactEntity>> getAllContactsLive();
     @Query("SELECT * FROM ContactEntity WHERE uuidHash = :sha256")
     ContactEntity[] findContactByHash(byte[] sha256);
     @Delete
