@@ -35,7 +35,6 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
         switch (contact.status){
             case READY:
-                //todo:onclick
                 holder.buttonCall.setVisibility(View.VISIBLE);
                 holder.contactStatus.setVisibility(View.GONE);
                 break;
