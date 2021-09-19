@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <item android:title="@string/from_contact_name" />
-    <item android:title="@string/from_uuid" />
+    <item
+        android:id="@+id/action_add_from_contact_name"
+        android:title="@string/from_contact_name" />
+    <item
+        android:id="@+id/action_add_uuid"
+        android:title="@string/from_uuid" />
 </menu>

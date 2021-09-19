@@ -54,17 +54,25 @@ public class SlideshowFragment extends Fragment {
         inputUUID.setText(sp.getUUID64());
 
         view.findViewById(R.id.button_input_contact_name).setOnClickListener(v -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+//            AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+//            final EditText input = new EditText(getContext());
+//            builder.setTitle(getString(R.string.contact_input_title)).setIcon(android.R.drawable.ic_dialog_info).setView(input);
+//            builder.setPositiveButton(R.string.confirm, (dialog, which) -> {
+//                if(input.getText().toString().equals("")){
+//                    UI.makeSnackBar(view,getString(R.string.contact_empty));
+//                    return;
+//                }
+//                inputUUID.setText(Crypto.to64(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8))));
+//            });
+//            builder.show();
             final EditText input = new EditText(getContext());
-            builder.setTitle(getString(R.string.contact_input_title)).setIcon(android.R.drawable.ic_dialog_info).setView(input);
-            builder.setPositiveButton(R.string.confirm, (dialog, which) -> {
+            UI.makeInputWindow(getContext(),input,getString(R.string.contact_input_title), (dialog, which) -> {
                 if(input.getText().toString().equals("")){
                     UI.makeSnackBar(view,getString(R.string.contact_empty));
                     return;
                 }
                 inputUUID.setText(Crypto.to64(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8))));
             });
-            builder.show();
         });
         view.findViewById(R.id.button_copy_uuid).setOnClickListener(v -> {
             ((ClipboardManager)getActivity().getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Label",inputUUID.getText()));

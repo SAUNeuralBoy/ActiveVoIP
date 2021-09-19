@@ -6,10 +6,8 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.view.MenuInflater;
-import android.view.View;
 import android.view.Menu;
-import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
 
@@ -17,7 +15,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -27,29 +24,21 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.room.Room;
-import androidx.room.RoomDatabase;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.PublicKey;
 import java.security.cert.CertificateException;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
-import java.util.List;
-
-import javax.crypto.KeyAgreement;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -59,7 +48,6 @@ import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
-import team.genesis.android.activevoip.ui.home.HomeViewModel;
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.ActiveDatagramTunnel;
@@ -81,6 +69,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
+        dao = contactDB.getDao();
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         FloatingActionButton fab = findViewById(R.id.fab);
@@ -100,6 +90,58 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
         findViewById(R.id.button_add).setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this,v);
+            popup.setOnMenuItemClickListener(item -> {
+                UUID uuid = new UUID();
+                AtomicBoolean noInput = new AtomicBoolean(false);
+                final EditText input = new EditText(this);
+                int itemId = item.getItemId();
+                Contact contact = new Contact();
+                if(itemId==R.id.action_add_from_contact_name){
+                    UI.makeInputWindow(this,input,getString(R.string.contact_input_title), (dialog, which) -> {
+                        if(input.getText().toString().equals("")){
+                            UI.makeSnackBar(v,getString(R.string.contact_empty));
+                            noInput.set(true);
+                            return;
+                        }
+                        uuid.fromBytes(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8)));
+                        contact.alias = input.getText().toString();
+                    });
+                }else if(itemId==R.id.action_add_uuid){
+                    UI.makeInputWindow(this,input,getString(R.string.from_uuid), (dialog, which) -> {
+                        if(input.getText().toString().equals("")){
+                            UI.makeSnackBar(v,getString(R.string.contact_empty));
+                            noInput.set(true);
+                            return;
+                        }
+                        uuid.fromBytes(Crypto.from64(input.getText().toString()));
+                    });
+                }else   return false;
+                if(noInput.get())   return false;
+                ByteBuf buf = Unpooled.buffer();
+                buf.writeInt(Ctrl.PAIR.ordinal());
+                KeyPairGenerator kpg;
+                try {
+                    kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+                    kpg.initialize(new KeyGenParameterSpec.Builder(
+                            Crypto.to64(uuid.getBytes()),
+                            KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                            .setDigests(KeyProperties.DIGEST_SHA256,
+                                    KeyProperties.DIGEST_SHA512)
+                            .build());
+                } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+                    e.printStackTrace();
+                    exit(0);
+                    return false;
+                }
+                KeyPair kp = kpg.generateKeyPair();
+                contact.uuid = uuid;
+                contact.ourPk = kp.getPublic().getEncoded();
+                buf.writeBytes(contact.ourPk);
+                write(buf.array(),uuid);
+                contact.status = Contact.Status.PAIR_SENT;
+                dao.insertContact(new ContactEntity(contact));
+                return true;
+            });
             popup.inflate(R.menu.add);
             popup.show();
         });
@@ -127,9 +169,6 @@ public class MainActivity extends AppCompatActivity {
             }
             ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
         });
-
-        contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
-        dao = contactDB.getDao();
 
         Handler uiHandler = new Handler();
         Runnable keepsAlive = new Runnable() {
@@ -296,6 +335,7 @@ public class MainActivity extends AppCompatActivity {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
+
 
     @Override
     public boolean onSupportNavigateUp() {
