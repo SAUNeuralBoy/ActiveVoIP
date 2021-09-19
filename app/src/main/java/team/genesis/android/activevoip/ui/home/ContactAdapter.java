@@ -31,6 +31,20 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             contact.uuid = new UUID(Crypto.from64(holder.contactUUID.getText().toString()));
             mActivity.createPair(contact);
         });
+        holder.buttonAccept.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(result==null)    return;
+            Contact contact;
+            try {
+                contact = result[0].getContact();
+            } catch (Crypto.DecryptException e) {
+                dao.deleteContact(result[0]);
+                return;
+            }
+            contact.status = Contact.Status.READY;
+            dao.insertContact(new ContactEntity(contact));
+        });
         holder.buttonReject.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();
             ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
