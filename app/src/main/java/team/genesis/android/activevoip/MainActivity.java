@@ -88,6 +88,33 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
         findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
+        sp = SPManager.getManager(this);
+        host = InetAddress.getLoopbackAddress();
+        port = sp.getPort();
+        try {
+            writeTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
+            listenTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
+        } catch (SocketException e) {
+            e.printStackTrace();
+            exit(0);
+        }
+
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        viewModel.getCompassColor().observe(this, compassColor -> {
+            int color = R.color.error_color;
+            switch (compassColor){
+                case FINE:
+                    color = R.color.fine_color;
+                    break;
+                case DISTURBING:
+                    color = R.color.distrubing_color;
+                    break;
+            }
+            ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
+        });
+
+        Handler uiHandler = new Handler();
+        Handler writeHandler = getCycledHandler("keepalive");
         findViewById(R.id.button_add).setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this,v);
             popup.setOnMenuItemClickListener(item -> {
@@ -137,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
                 contact.uuid = uuid;
                 contact.ourPk = kp.getPublic().getEncoded();
                 buf.writeBytes(contact.ourPk);
-                write(buf.array(),uuid);
+                writeHandler.post(() -> write(buf.array(),uuid));
                 contact.status = Contact.Status.PAIR_SENT;
                 dao.insertContact(new ContactEntity(contact));
                 return true;
@@ -145,33 +172,6 @@ public class MainActivity extends AppCompatActivity {
             popup.inflate(R.menu.add);
             popup.show();
         });
-        sp = SPManager.getManager(this);
-        host = InetAddress.getLoopbackAddress();
-        port = sp.getPort();
-        try {
-            writeTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
-            listenTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
-        } catch (SocketException e) {
-            e.printStackTrace();
-            exit(0);
-        }
-
-        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
-        viewModel.getCompassColor().observe(this, compassColor -> {
-            int color = R.color.error_color;
-            switch (compassColor){
-                case FINE:
-                    color = R.color.fine_color;
-                    break;
-                case DISTURBING:
-                    color = R.color.distrubing_color;
-                    break;
-            }
-            ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
-        });
-
-        Handler uiHandler = new Handler();
-        Handler keepAliveHandler = getCycledHandler("keepalive");
         Runnable keepsAlive = new Runnable() {
             @Override
             public void run() {
@@ -180,11 +180,11 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }finally {
-                    keepAliveHandler.postDelayed(this,5000);
+                    writeHandler.postDelayed(this,5000);
                 }
             }
         };
-        keepAliveHandler.postDelayed(keepsAlive,5000);
+        writeHandler.postDelayed(keepsAlive,5000);
 
         Handler recvHandler = getCycledHandler("recv");
         Runnable recv = new Runnable() {
