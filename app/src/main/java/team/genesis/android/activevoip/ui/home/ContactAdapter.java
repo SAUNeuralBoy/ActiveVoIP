@@ -40,6 +40,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
                 break;
             case CONFIRM_WAIT:
                 holder.contactStatus.setText(R.string.wait_for_confirm);
+                holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
                 break;
             case PAIR_SENT:
             case PAIR_RCVD:
@@ -64,6 +65,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         TextView contactAlias;
         TextView contactUUID;
         TextView contactStatus;
+        TextView contactFingerPrint;
         ImageButton buttonCall;
 
         public ViewHolder (View view)
@@ -73,6 +75,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             contactUUID = view.findViewById(R.id.contact_uuid);
             buttonCall = view.findViewById(R.id.button_call_contact);
             contactStatus = view.findViewById(R.id.contact_status);
+            contactFingerPrint = view.findViewById(R.id.contact_fingerprint);
         }
 
 
