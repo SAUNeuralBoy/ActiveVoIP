@@ -389,7 +389,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
-    private Handler getCycledHandler(String name){
+    public static Handler getCycledHandler(String name){
         HandlerThread thread = new HandlerThread(name);
         thread.start();
         return new Handler(thread.getLooper());

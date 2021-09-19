@@ -1,6 +1,7 @@
 package team.genesis.android.activevoip.ui.gallery;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,6 +42,8 @@ public class GalleryFragment extends Fragment {
         SPManager sp = SPManager.getManager((MainActivity) getActivity());
         inputHostname.setText(sp.getHostname());
         inputPort.setText(String.valueOf(sp.getPort()));
+        Handler networkHandler = MainActivity.getCycledHandler("network_test");
+        Handler uiHandler = new Handler();
 
         view.findViewById(R.id.button_test).setOnClickListener(v -> {
             TextView status = view.findViewById(R.id.status_host);
@@ -67,22 +70,43 @@ public class GalleryFragment extends Fragment {
                 status.setText(R.string.unknown_host);
                 return;
             }
-            int cnt = 0;
-            try {
-                cnt = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
-            } catch (IOException e) {
-                status.setText(R.string.system_network_failure);
-            }
-            if(cnt<=0)
-                status.setText(R.string.server_no_response);
-            else if(cnt<10) {
-                status.setText(String.format(getString(R.string.packet_loss_by_percent), (10 - cnt) * 10));
-                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.distrubing_color));
-            }
-            else{
-                status.setText(R.string.server_status_fine);
-                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
-            }
+//            int cnt = 0;
+//            try {
+//                cnt = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
+//            } catch (IOException e) {
+//                status.setText(R.string.system_network_failure);
+//            }
+//            if(cnt<=0)
+//                status.setText(R.string.server_no_response);
+//            else if(cnt<10) {
+//                status.setText(String.format(getString(R.string.packet_loss_by_percent), (10 - cnt) * 10));
+//                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.distrubing_color));
+//            }
+//            else{
+//                status.setText(R.string.server_status_fine);
+//                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
+//            }
+            networkHandler.post(() -> {
+                int cnt1 = 0;
+                try {
+                    cnt1 = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
+                } catch (IOException e) {
+                    uiHandler.post(()-> status.setText(R.string.system_network_failure));
+                }
+                int finalCnt = cnt1;
+                uiHandler.post(() -> {
+                    if(finalCnt <=0)
+                        status.setText(R.string.server_no_response);
+                    else if(finalCnt <10) {
+                        status.setText(String.format(getString(R.string.packet_loss_by_percent), (10 - finalCnt) * 10));
+                        status.setTextColor(ContextCompat.getColor(requireContext(),R.color.distrubing_color));
+                    }
+                    else{
+                        status.setText(R.string.server_status_fine);
+                        status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
+                    }
+                });
+            });
         });
         view.findViewById(R.id.button_apply).setOnClickListener(v -> {
             String hostName = inputHostname.getText().toString().toLowerCase();
