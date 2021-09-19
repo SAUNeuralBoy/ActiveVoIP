@@ -37,7 +37,7 @@ public class HomeFragment extends Fragment {
         final TextView textView = root.findViewById(R.id.text_home);
         final RecyclerView listContact = root.findViewById(R.id.list_contact);
         listContact.setLayoutManager(new LinearLayoutManager(getContext()));
-        ContactAdapter adapter = new ContactAdapter(dao.getAllContacts());
+        ContactAdapter adapter = new ContactAdapter((MainActivity) requireActivity(),dao.getAllContacts());
         listContact.setAdapter(adapter);
         homeViewModel.getText().observe(getViewLifecycleOwner(), textView::setText);
         dao.getAllContactsLive().observe(getViewLifecycleOwner(), contactEntities -> {

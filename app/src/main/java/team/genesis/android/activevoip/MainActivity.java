@@ -63,10 +63,12 @@ public class MainActivity extends AppCompatActivity {
     private MainViewModel viewModel;
 
     private ContactDao dao;
+    private Handler writeHandler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        writeHandler = getCycledHandler("keepalive");
         dao = ((ContactDB)Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -112,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
         Handler uiHandler = new Handler();
-        Handler writeHandler = getCycledHandler("keepalive");
         findViewById(R.id.button_add).setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this,v);
             popup.setOnMenuItemClickListener(item -> {
@@ -121,29 +122,8 @@ public class MainActivity extends AppCompatActivity {
                 int itemId = item.getItemId();
                 Contact contact = new Contact();
                 Runnable r = () -> {
-                    ByteBuf buf = Unpooled.buffer();
-                    buf.writeInt(Ctrl.PAIR.ordinal());
-                    KeyPairGenerator kpg;
-                    try {
-                        kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-                        kpg.initialize(new KeyGenParameterSpec.Builder(
-                                Crypto.to64(uuid.getBytes()),
-                                KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                                .setDigests(KeyProperties.DIGEST_SHA256,
-                                        KeyProperties.DIGEST_SHA512)
-                                .build());
-                    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
-                        e.printStackTrace();
-                        exit(0);
-                        return;
-                    }
-                    KeyPair kp = kpg.generateKeyPair();
                     contact.uuid = uuid;
-                    contact.ourPk = kp.getPublic().getEncoded();
-                    buf.writeBytes(contact.ourPk);
-                    writeHandler.post(() -> write(buf.array(),uuid));
-                    contact.status = Contact.Status.PAIR_SENT;
-                    dao.insertContact(new ContactEntity(contact));
+                    createPair(contact);
                 };
                 if(itemId==R.id.action_add_from_contact_name){
                     UI.makeInputWindow(this,input,getString(R.string.contact_input_title), (dialog, which) -> {
@@ -394,5 +374,29 @@ public class MainActivity extends AppCompatActivity {
     }
     public ContactDao getDao(){
         return dao;
+    }
+    public void createPair(Contact contact){
+        ByteBuf buf = Unpooled.buffer();
+        buf.writeInt(Ctrl.PAIR.ordinal());
+        KeyPairGenerator kpg;
+        try {
+            kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+            kpg.initialize(new KeyGenParameterSpec.Builder(
+                    Crypto.to64(contact.uuid.getBytes()),
+                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                    .setDigests(KeyProperties.DIGEST_SHA256,
+                            KeyProperties.DIGEST_SHA512)
+                    .build());
+        } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+            e.printStackTrace();
+            exit(0);
+            return;
+        }
+        KeyPair kp = kpg.generateKeyPair();
+        contact.ourPk = kp.getPublic().getEncoded();
+        buf.writeBytes(contact.ourPk);
+        writeHandler.post(() -> write(buf.array(),contact.uuid));
+        contact.status = Contact.Status.PAIR_SENT;
+        dao.insertContact(new ContactEntity(contact));
     }
 }

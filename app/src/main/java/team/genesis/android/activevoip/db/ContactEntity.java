@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey;
 
 import com.google.gson.Gson;
 
+import java.time.Instant;
 import java.util.Objects;
 
 import team.genesis.android.activevoip.Crypto;
@@ -17,9 +18,11 @@ public class ContactEntity {
     @NonNull
     byte[] uuidHash;
     byte[] encryptedData;
+    long timeStamp;
     public ContactEntity(Contact contact){
         uuidHash = Objects.requireNonNull(Crypto.sha256(contact.uuid.getBytes()));
         encryptedData = Crypto.encryptWithMasterKey(new Gson().toJson(contact).getBytes());
+        timeStamp = System.currentTimeMillis();
     }
     public ContactEntity(){
         uuidHash = new byte[32];

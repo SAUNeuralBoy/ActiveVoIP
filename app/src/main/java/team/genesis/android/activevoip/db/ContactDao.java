@@ -16,9 +16,9 @@ import java.util.UUID;
 public interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insertContact(ContactEntity... contacts);
-    @Query("SELECT * FROM ContactEntity")
+    @Query("SELECT * FROM ContactEntity ORDER BY timeStamp DESC")
     List<ContactEntity> getAllContacts();
-    @Query("SELECT * FROM ContactEntity")
+    @Query("SELECT * FROM ContactEntity ORDER BY timeStamp DESC")
     LiveData<List<ContactEntity>> getAllContactsLive();
     @Query("SELECT * FROM ContactEntity WHERE uuidHash = :sha256")
     ContactEntity[] findContactByHash(byte[] sha256);
