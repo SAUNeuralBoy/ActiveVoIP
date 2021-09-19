@@ -87,13 +87,13 @@ public class GalleryFragment extends Fragment {
 //                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
 //            }
             networkHandler.post(() -> {
-                int cnt1 = 0;
+                int cnt = 0;
                 try {
-                    cnt1 = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
+                    cnt = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
                 } catch (IOException e) {
                     uiHandler.post(()-> status.setText(R.string.system_network_failure));
                 }
-                int finalCnt = cnt1;
+                int finalCnt = cnt;
                 uiHandler.post(() -> {
                     if(finalCnt <=0)
                         status.setText(R.string.server_no_response);
