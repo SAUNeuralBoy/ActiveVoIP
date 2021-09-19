@@ -66,6 +66,8 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
         switch (contact.status){
             case READY:
+                holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
+                holder.contactFingerPrint.setVisibility(View.VISIBLE);
                 holder.contactStatus.setVisibility(View.GONE);
                 holder.buttonRetry.setVisibility(View.GONE);
                 holder.buttonAccept.setVisibility(View.GONE);
@@ -75,6 +77,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             case CONFIRM_WAIT:
                 //holder.contactStatus.setText(R.string.wait_for_confirm);
                 holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
+                holder.contactFingerPrint.setVisibility(View.VISIBLE);
                 holder.contactStatus.setVisibility(View.GONE);
                 holder.buttonRetry.setVisibility(View.GONE);
                 holder.buttonAccept.setVisibility(View.VISIBLE);
@@ -84,6 +87,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             case PAIR_SENT:
             case PAIR_RCVD:
                 holder.contactStatus.setText(R.string.wait_for_response);
+                holder.contactFingerPrint.setVisibility(View.GONE);
                 holder.contactStatus.setVisibility(View.VISIBLE);
                 holder.buttonRetry.setVisibility(View.VISIBLE);
                 holder.buttonAccept.setVisibility(View.GONE);
