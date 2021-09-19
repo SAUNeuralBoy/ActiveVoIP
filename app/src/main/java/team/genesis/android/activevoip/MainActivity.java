@@ -190,7 +190,18 @@ public class MainActivity extends AppCompatActivity {
                                             KeyProperties.DIGEST_SHA512)
                                     .build());
                             KeyPair kp = kpg.generateKeyPair();
-                            Contact contact = new Contact();
+                            Contact contact;
+                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
+                            if(result==null)
+                                contact = new Contact();
+                            else {
+                                try {
+                                    contact = result[0].getContact();
+                                } catch (Crypto.DecryptException e) {
+                                    dao.deleteContact(result[0]);
+                                    contact = new Contact();
+                                }
+                            }
                             contact.uuid = msg.src;
                             contact.ourPk = kp.getPublic().getEncoded();
                             buf.readBytes(contact.otherPk, 0, 91);
