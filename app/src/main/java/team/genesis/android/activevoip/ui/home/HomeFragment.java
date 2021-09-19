@@ -18,6 +18,7 @@ import androidx.room.Room;
 
 import java.util.List;
 
+import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.db.ContactDB;
 import team.genesis.android.activevoip.db.ContactDao;
@@ -49,7 +50,7 @@ public class HomeFragment extends Fragment {
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
-        dao = ((ContactDB) Room.databaseBuilder(context, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
+        dao = ((MainActivity)requireActivity()).getDao();
     }
     @Override
     public void onStop() {

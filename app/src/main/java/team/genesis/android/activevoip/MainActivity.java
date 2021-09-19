@@ -68,9 +68,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
         contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
         dao = contactDB.getDao();
+        setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         FloatingActionButton fab = findViewById(R.id.fab);
@@ -396,5 +396,8 @@ public class MainActivity extends AppCompatActivity {
         HandlerThread thread = new HandlerThread(name);
         thread.start();
         return new Handler(thread.getLooper());
+    }
+    public ContactDao getDao(){
+        return dao;
     }
 }
