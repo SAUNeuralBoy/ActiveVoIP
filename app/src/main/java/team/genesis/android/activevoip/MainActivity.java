@@ -343,11 +343,11 @@ public class MainActivity extends AppCompatActivity {
         listenTunnel.setSrc(uuid);
     }
     public void write(byte[] data, UUID dst){
-        try {
+        writeHandler.post(()->{ try {
             writeTunnel.send(data,dst);
         } catch (IOException e) {
             e.printStackTrace();
-        }
+        }});
     }
     public void update(){
         setUUID(sp.getUUID());
@@ -395,7 +395,7 @@ public class MainActivity extends AppCompatActivity {
         KeyPair kp = kpg.generateKeyPair();
         contact.ourPk = kp.getPublic().getEncoded();
         buf.writeBytes(contact.ourPk);
-        writeHandler.post(() -> write(buf.array(),contact.uuid));
+        write(buf.array(),contact.uuid);
         contact.status = Contact.Status.PAIR_SENT;
         dao.insertContact(new ContactEntity(contact));
     }
