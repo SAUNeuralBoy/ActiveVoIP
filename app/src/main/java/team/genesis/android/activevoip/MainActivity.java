@@ -119,54 +119,57 @@ public class MainActivity extends AppCompatActivity {
             PopupMenu popup = new PopupMenu(this,v);
             popup.setOnMenuItemClickListener(item -> {
                 UUID uuid = new UUID();
-                AtomicBoolean noInput = new AtomicBoolean(false);
                 final EditText input = new EditText(this);
                 int itemId = item.getItemId();
                 Contact contact = new Contact();
+                Runnable r = new Runnable() {
+                    @Override
+                    public void run() {
+                        ByteBuf buf = Unpooled.buffer();
+                        buf.writeInt(Ctrl.PAIR.ordinal());
+                        KeyPairGenerator kpg;
+                        try {
+                            kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+                            kpg.initialize(new KeyGenParameterSpec.Builder(
+                                    Crypto.to64(uuid.getBytes()),
+                                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                                    .setDigests(KeyProperties.DIGEST_SHA256,
+                                            KeyProperties.DIGEST_SHA512)
+                                    .build());
+                        } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+                            e.printStackTrace();
+                            exit(0);
+                            return;
+                        }
+                        KeyPair kp = kpg.generateKeyPair();
+                        contact.uuid = uuid;
+                        contact.ourPk = kp.getPublic().getEncoded();
+                        buf.writeBytes(contact.ourPk);
+                        writeHandler.post(() -> write(buf.array(),uuid));
+                        contact.status = Contact.Status.PAIR_SENT;
+                        dao.insertContact(new ContactEntity(contact));
+                    }
+                };
                 if(itemId==R.id.action_add_from_contact_name){
                     UI.makeInputWindow(this,input,getString(R.string.contact_input_title), (dialog, which) -> {
                         if(input.getText().toString().equals("")){
                             UI.makeSnackBar(v,getString(R.string.contact_empty));
-                            noInput.set(true);
                             return;
                         }
                         uuid.fromBytes(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8)));
                         contact.alias = input.getText().toString();
+                        r.run();
                     });
                 }else if(itemId==R.id.action_add_uuid){
                     UI.makeInputWindow(this,input,getString(R.string.from_uuid), (dialog, which) -> {
                         if(input.getText().toString().equals("")){
                             UI.makeSnackBar(v,getString(R.string.contact_empty));
-                            noInput.set(true);
                             return;
                         }
                         uuid.fromBytes(Crypto.from64(input.getText().toString()));
+                        r.run();
                     });
-                }else   return false;
-                if(noInput.get())   return false;
-                ByteBuf buf = Unpooled.buffer();
-                buf.writeInt(Ctrl.PAIR.ordinal());
-                KeyPairGenerator kpg;
-                try {
-                    kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-                    kpg.initialize(new KeyGenParameterSpec.Builder(
-                            Crypto.to64(uuid.getBytes()),
-                            KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                            .setDigests(KeyProperties.DIGEST_SHA256,
-                                    KeyProperties.DIGEST_SHA512)
-                            .build());
-                } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
-                    e.printStackTrace();
-                    exit(0);
-                    return false;
-                }
-                KeyPair kp = kpg.generateKeyPair();
-                contact.uuid = uuid;
-                contact.ourPk = kp.getPublic().getEncoded();
-                buf.writeBytes(contact.ourPk);
-                writeHandler.post(() -> write(buf.array(),uuid));
-                contact.status = Contact.Status.PAIR_SENT;
-                dao.insertContact(new ContactEntity(contact));
+                }else return false;
                 return true;
             });
             popup.inflate(R.menu.add);
