@@ -171,6 +171,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         Handler uiHandler = new Handler();
+        Handler keepAliveHandler = getCycledHandler("keepalive");
         Runnable keepsAlive = new Runnable() {
             @Override
             public void run() {
@@ -183,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
-        uiHandler.postDelayed(keepsAlive,5000);
+        keepAliveHandler.postDelayed(keepsAlive,5000);
 
         Handler recvHandler = getCycledHandler("recv");
         Runnable recv = new Runnable() {
