@@ -36,4 +36,6 @@
     <string name="host_set">Host set</string>
     <string name="wait_for_confirm">Wait for confirm</string>
     <string name="wait_for_response">Wait for response</string>
+    <string name="from_contact_name">From Contact Name</string>
+    <string name="from_uuid">From UUID</string>
 </resources>

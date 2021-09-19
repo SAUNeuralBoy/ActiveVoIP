@@ -51,4 +51,15 @@ public class HomeFragment extends Fragment {
         super.onAttach(context);
         dao = ((ContactDB) Room.databaseBuilder(context, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
     }
+    @Override
+    public void onStop() {
+        super.onStop();
+        requireActivity().findViewById(R.id.button_add).setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        requireActivity().findViewById(R.id.button_add).setVisibility(View.VISIBLE);
+    }
 }

@@ -6,10 +6,12 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.view.MenuInflater;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.PopupMenu;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
@@ -96,6 +98,11 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
         findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
+        findViewById(R.id.button_add).setOnClickListener(v -> {
+            PopupMenu popup = new PopupMenu(this,v);
+            popup.inflate(R.menu.add);
+            popup.show();
+        });
         sp = SPManager.getManager(this);
         host = InetAddress.getLoopbackAddress();
         port = sp.getPort();
