@@ -15,6 +15,8 @@ import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.data.Contact;
+import team.genesis.android.activevoip.db.ContactDB;
+import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.data.UUID;
 
@@ -28,6 +30,12 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             contact.alias = holder.contactAlias.getText().toString();
             contact.uuid = new UUID(Crypto.from64(holder.contactUUID.getText().toString()));
             mActivity.createPair(contact);
+        });
+        holder.buttonReject.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(result==null)    return;
+            dao.deleteContact(result[0]);
         });
         return holder;
     }
@@ -44,20 +52,31 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
         switch (contact.status){
             case READY:
-                holder.buttonCall.setVisibility(View.VISIBLE);
                 holder.contactStatus.setVisibility(View.GONE);
+                holder.buttonRetry.setVisibility(View.GONE);
+                holder.buttonAccept.setVisibility(View.GONE);
+                holder.buttonReject.setVisibility(View.GONE);
+                holder.buttonCall.setVisibility(View.VISIBLE);
                 break;
             case CONFIRM_WAIT:
-                holder.contactStatus.setText(R.string.wait_for_confirm);
+                //holder.contactStatus.setText(R.string.wait_for_confirm);
                 holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
+                holder.contactStatus.setVisibility(View.GONE);
+                holder.buttonRetry.setVisibility(View.GONE);
+                holder.buttonAccept.setVisibility(View.VISIBLE);
+                holder.buttonReject.setVisibility(View.VISIBLE);
+                holder.buttonCall.setVisibility(View.GONE);
                 break;
             case PAIR_SENT:
             case PAIR_RCVD:
                 holder.contactStatus.setText(R.string.wait_for_response);
+                holder.contactStatus.setVisibility(View.VISIBLE);
+                holder.buttonRetry.setVisibility(View.VISIBLE);
+                holder.buttonAccept.setVisibility(View.GONE);
+                holder.buttonReject.setVisibility(View.GONE);
+                holder.buttonCall.setVisibility(View.GONE);
                 break;
         }
-        if(contact.status== Contact.Status.PAIR_SENT||contact.status== Contact.Status.PAIR_RCVD)
-            holder.buttonRetry.setVisibility(View.VISIBLE);
     }
 
     @Override
@@ -81,6 +100,8 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         TextView contactFingerPrint;
         ImageButton buttonCall;
         ImageButton buttonRetry;
+        ImageButton buttonAccept;
+        ImageButton buttonReject;
 
         public ViewHolder (View view)
         {
@@ -91,6 +112,8 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             contactStatus = view.findViewById(R.id.contact_status);
             contactFingerPrint = view.findViewById(R.id.contact_fingerprint);
             buttonRetry = view.findViewById(R.id.button_pair_retry);
+            buttonAccept = view.findViewById(R.id.button_pair_accept);
+            buttonReject = view.findViewById(R.id.button_pair_reject);
         }
 
 

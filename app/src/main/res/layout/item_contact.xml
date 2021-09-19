@@ -42,8 +42,22 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_weight="0.05"
-        android:visibility="gone"
+        android:visibility="visible"
         app:srcCompat="@android:drawable/stat_notify_sync_noanim" />
+
+    <ImageButton
+        android:id="@+id/button_pair_accept"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.05"
+        app:srcCompat="@android:drawable/ic_menu_save" />
+
+    <ImageButton
+        android:id="@+id/button_pair_reject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.05"
+        app:srcCompat="@android:drawable/ic_delete" />
 
     <ImageButton
         android:id="@+id/button_call_contact"
@@ -51,6 +65,6 @@
         android:layout_height="wrap_content"
         android:layout_weight="0.05"
         android:background="#00000000"
-        android:visibility="gone"
+        android:visibility="visible"
         app:srcCompat="@android:drawable/ic_menu_call" />
 </LinearLayout>
