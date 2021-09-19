@@ -62,14 +62,12 @@ public class MainActivity extends AppCompatActivity {
 
     private MainViewModel viewModel;
 
-    private ContactDB contactDB;
     private ContactDao dao;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        contactDB = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build();
-        dao = contactDB.getDao();
+        dao = ((ContactDB)Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
