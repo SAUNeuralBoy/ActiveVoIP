@@ -4,6 +4,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -33,7 +36,10 @@ public class Contact {
             exit(0);
             return null;
         }
-        sha.update(ourPk);
-        return sha.digest(otherPk);
+        List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(ourPk), ByteBuffer.wrap(otherPk));
+        Collections.sort(keys);
+        sha.update(keys.get(0));
+        sha.update(keys.get(1));
+        return sha.digest();
     }
 }
