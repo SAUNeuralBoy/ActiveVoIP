@@ -87,25 +87,23 @@ public class GalleryFragment extends Fragment {
 //                status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
 //            }
             networkHandler.post(() -> {
-                int cnt = 0;
                 try {
-                    cnt = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
+                    int cnt = UDPActiveDatagramTunnel.getProbe(1000).probe(dns.getIP(),port,10);
+                    uiHandler.post(() -> {
+                        if(cnt <=0)
+                            status.setText(R.string.server_no_response);
+                        else if(cnt <10) {
+                            status.setText(String.format(getString(R.string.packet_loss_by_percent), (10 - cnt) * 10));
+                            status.setTextColor(ContextCompat.getColor(requireContext(),R.color.distrubing_color));
+                        }
+                        else{
+                            status.setText(R.string.server_status_fine);
+                            status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
+                        }
+                    });
                 } catch (IOException e) {
                     uiHandler.post(()-> status.setText(R.string.system_network_failure));
                 }
-                int finalCnt = cnt;
-                uiHandler.post(() -> {
-                    if(finalCnt <=0)
-                        status.setText(R.string.server_no_response);
-                    else if(finalCnt <10) {
-                        status.setText(String.format(getString(R.string.packet_loss_by_percent), (10 - finalCnt) * 10));
-                        status.setTextColor(ContextCompat.getColor(requireContext(),R.color.distrubing_color));
-                    }
-                    else{
-                        status.setText(R.string.server_status_fine);
-                        status.setTextColor(ContextCompat.getColor(requireContext(),R.color.fine_color));
-                    }
-                });
             });
         });
         view.findViewById(R.id.button_apply).setOnClickListener(v -> {
