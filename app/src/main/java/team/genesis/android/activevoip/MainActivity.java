@@ -180,7 +180,7 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }finally {
-                    uiHandler.postDelayed(this,5000);
+                    keepAliveHandler.postDelayed(this,5000);
                 }
             }
         };
