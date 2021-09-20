@@ -64,36 +64,31 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         }
         holder.contactAlias.setText(contact.alias);
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
+        holder.setDefaultVisibility();
+
         switch (contact.status){
             case READY:
                 holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
-                holder.contactFingerPrint.setVisibility(View.VISIBLE);
-                holder.contactStatus.setVisibility(View.GONE);
-                holder.buttonRetry.setVisibility(View.GONE);
-                holder.buttonAccept.setVisibility(View.GONE);
-                holder.buttonReject.setVisibility(View.GONE);
                 holder.buttonCall.setVisibility(View.VISIBLE);
                 break;
             case CONFIRM_WAIT:
                 //holder.contactStatus.setText(R.string.wait_for_confirm);
                 holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
-                holder.contactFingerPrint.setVisibility(View.VISIBLE);
-                holder.contactStatus.setVisibility(View.GONE);
-                holder.buttonRetry.setVisibility(View.GONE);
                 holder.buttonAccept.setVisibility(View.VISIBLE);
                 holder.buttonReject.setVisibility(View.VISIBLE);
-                holder.buttonCall.setVisibility(View.GONE);
                 break;
             case PAIR_SENT:
             case PAIR_RCVD:
                 holder.contactStatus.setText(R.string.wait_for_response);
-                holder.contactFingerPrint.setVisibility(View.GONE);
                 holder.contactStatus.setVisibility(View.VISIBLE);
                 holder.buttonRetry.setVisibility(View.VISIBLE);
-                holder.buttonAccept.setVisibility(View.GONE);
-                holder.buttonReject.setVisibility(View.GONE);
-                holder.buttonCall.setVisibility(View.GONE);
+                holder.contactFingerPrint.setVisibility(View.GONE);
                 break;
+        }
+        if(mEditable){
+            holder.setDefaultVisibility();
+            holder.buttonEdit.setVisibility(View.VISIBLE);
+            holder.buttonDelete.setVisibility(View.VISIBLE);
         }
     }
 
@@ -104,9 +99,14 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
 
     private List<ContactEntity> mContactList;
     private final MainActivity mActivity;
-    public ContactAdapter(MainActivity activity, List<ContactEntity> contacts){
+    private final boolean mEditable;
+    public ContactAdapter(MainActivity activity, List<ContactEntity> contacts, boolean editable){
         mActivity = activity;
         setContactList(contacts);
+        mEditable = editable;
+    }
+    public ContactAdapter(MainActivity activity, List<ContactEntity> contacts){
+        this(activity,contacts,false);
     }
     public void setContactList(List<ContactEntity> contacts){
         mContactList = contacts;
@@ -120,6 +120,8 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         ImageButton buttonRetry;
         ImageButton buttonAccept;
         ImageButton buttonReject;
+        ImageButton buttonEdit;
+        ImageButton buttonDelete;
 
         public ViewHolder (View view)
         {
@@ -132,6 +134,18 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             buttonRetry = view.findViewById(R.id.button_pair_retry);
             buttonAccept = view.findViewById(R.id.button_pair_accept);
             buttonReject = view.findViewById(R.id.button_pair_reject);
+            buttonEdit = view.findViewById(R.id.button_edit_contact);
+            buttonDelete = view.findViewById(R.id.button_delete_contact);
+        }
+        public void setDefaultVisibility(){
+            contactFingerPrint.setVisibility(View.VISIBLE);
+            contactStatus.setVisibility(View.GONE);
+            buttonRetry.setVisibility(View.GONE);
+            buttonAccept.setVisibility(View.GONE);
+            buttonReject.setVisibility(View.GONE);
+            buttonCall.setVisibility(View.GONE);
+            buttonEdit.setVisibility(View.GONE);
+            buttonDelete.setVisibility(View.GONE);
         }
 
 
