@@ -10,6 +10,8 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.List;
@@ -22,6 +24,8 @@ import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.db.ContactDB;
 import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
+import team.genesis.android.activevoip.ui.MainViewModel;
+import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.data.UUID;
 
 public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHolder> {
@@ -83,6 +87,20 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             builder.setNegativeButton("Cancel", (dialog, which) -> {
             });
             builder.show();
+        });
+        holder.buttonCall.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(result==null)    return;
+            Contact contact;
+            try {
+                contact = result[0].getContact();
+            } catch (Crypto.DecryptException e) {
+                dao.deleteContact(result[0]);
+                return;
+            }
+            new ViewModelProvider(mActivity).get(TalkingViewModel.class).setContact(contact);
+            Navigation.findNavController(mActivity, R.id.nav_host_fragment).navigate(R.id.nav_talking);
         });
         return holder;
     }
