@@ -42,4 +42,13 @@
     <string name="alias_input">Input contact alias</string>
     <string name="pair_failed">Pair failed</string>
     <string name="calling">Calling…</string>
+    <string name="delete_contact">Delete Contact</string>
+    <string name="comfirm_delete">Confirm delete?</string>
+    <string name="yes">Yes</string>
+    <string name="cancel">Cancel</string>
+    <string name="dangerous">Dangerous!</string>
+    <string name="mitm_warning_msg">Verify failure,high probability of encountering a man-in-the-middle attack!</string>
+    <string name="panic">Panic!</string>
+    <string name="remain_calm">Remain calm</string>
+    <string name="incoming_call_with_format">Incoming call from %s(%s)with fingerprint %s</string>
 </resources>

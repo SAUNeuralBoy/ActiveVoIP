@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleEventObserver;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import android.os.Handler;
@@ -49,10 +50,10 @@ import static java.lang.System.exit;
 
 public class TalkingFragment extends Fragment {
 
-    private boolean calling;
     private TalkingViewModel viewModel;
     private Contact contact;
     private TextView status;
+    private Handler uiHandler;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -65,54 +66,72 @@ public class TalkingFragment extends Fragment {
         viewModel = new ViewModelProvider(requireActivity()).get(TalkingViewModel.class);
         View root = inflater.inflate(R.layout.fragment_talking, container, false);
         status = root.findViewById(R.id.status_talking);
+        contact = viewModel.getContact();
+        uiHandler = new Handler();
+        NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment);
 
-        try {
-            contact = viewModel.getContact();
-            KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-            kpg.initialize(new KeyGenParameterSpec.Builder(
-                    "talking_ec_key",
-                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                    .setDigests(KeyProperties.DIGEST_SHA256,
-                            KeyProperties.DIGEST_SHA512)
-                    .build());
-            KeyPair kp = kpg.generateKeyPair();
-            byte[] ourPk = kp.getPublic().getEncoded();
-            ByteBuf buf = Unpooled.buffer();
-            buf.writeInt(Ctrl.CALL.ordinal());
-            buf.writeBytes(ourPk);
-            Signature s = Signature.getInstance("SHA256withECDSA");
-            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            if (keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) {
-                s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
-                s.update(ourPk);
-                buf.writeBytes(s.sign());
-                Handler uiHandler = new Handler();
+        switch (viewModel.getStatus()){
+            case CALLING:{ try {
+                KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+                kpg.initialize(new KeyGenParameterSpec.Builder(
+                        "talking_ec_key",
+                        KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                        .setDigests(KeyProperties.DIGEST_SHA256,
+                                KeyProperties.DIGEST_SHA512)
+                        .build());
+                KeyPair kp = kpg.generateKeyPair();
+                byte[] ourPk = kp.getPublic().getEncoded();
+                ByteBuf buf = Unpooled.buffer();
+                buf.writeInt(Ctrl.CALL.ordinal());
+                buf.writeBytes(ourPk);
+                Signature s = Signature.getInstance("SHA256withECDSA");
+                KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+                keyStore.load(null);
+                if (keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) {
+                    s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
+                    s.update(ourPk);
+                    buf.writeBytes(s.sign());
+                    Runnable r = new Runnable() {
+                        @Override
+                        public void run() {
+                            if (viewModel.getStatus()!= TalkingViewModel.Status.CALLING) return;
+                            ((MainActivity) requireActivity()).write(buf.array(), contact.uuid);
+                            uiHandler.postDelayed(this, 1000);
+                        }
+                    };
+                    uiHandler.post(r);
+                    status.setText(R.string.calling);
+
+                } else {
+                    UI.makeSnackBar(getView(), getString(R.string.pair_failed));
+                    navController.navigate(R.id.nav_home);
+                }
+            } catch (SignatureException | UnrecoverableEntryException | CertificateException | InvalidKeyException | KeyStoreException | IOException e) {
+                UI.makeSnackBar(getView(), getString(R.string.pair_failed));
+                Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
+            } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
+                e.printStackTrace();
+                exit(0);
+            }
+            break;
+            }
+            case INVOKING:
+                status.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.to64(contact.pkSHA256())));
+                root.findViewById(R.id.layout_incoming_action).setVisibility(View.VISIBLE);
                 Runnable r = new Runnable() {
                     @Override
                     public void run() {
-                        if (!calling) return;
-                        ((MainActivity) requireActivity()).write(buf.array(), contact.uuid);
-                        uiHandler.postDelayed(this, 1000);
+                        if(viewModel.getStatus()== TalkingViewModel.Status.INCOMING)
+                            navController.navigate(R.id.nav_home);
+                        else if(viewModel.getStatus()== TalkingViewModel.Status.INVOKING) {
+                            viewModel.setStatus(TalkingViewModel.Status.INCOMING);
+                            uiHandler.postDelayed(this,2500);
+                        }
                     }
                 };
-                calling = true;
                 uiHandler.post(r);
-                status.setText(R.string.calling);
-
-            } else {
-                UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-                Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
-            }
-        } catch (SignatureException | UnrecoverableEntryException | CertificateException | InvalidKeyException | KeyStoreException | IOException e) {
-            UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-            Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
-            e.printStackTrace();
-            exit(0);
+                break;
         }
-
-
         return root;
     }
     @Override
@@ -134,7 +153,7 @@ public class TalkingFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        calling = false;
+        viewModel.setStatus(TalkingViewModel.Status.DEAD);
     }
 
     @Override

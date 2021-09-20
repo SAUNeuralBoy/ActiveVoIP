@@ -1,5 +1,6 @@
 package team.genesis.android.activevoip;
 
+import android.app.AlertDialog;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
@@ -30,15 +31,20 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.Signature;
+import java.security.SignatureException;
 import java.security.cert.CertificateException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -48,6 +54,7 @@ import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
+import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.ActiveDatagramTunnel;
@@ -61,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private AppBarConfiguration mAppBarConfiguration;
 
     private MainViewModel viewModel;
+    private TalkingViewModel talkingViewModel;
 
     private ContactDao dao;
     private Handler writeHandler;
@@ -68,6 +76,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        talkingViewModel = new ViewModelProvider(this).get(TalkingViewModel.class);
         writeHandler = getCycledHandler("keepalive");
         dao = ((ContactDB)Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
         setContentView(R.layout.activity_main);
@@ -166,6 +175,7 @@ public class MainActivity extends AppCompatActivity {
         writeHandler.postDelayed(keepsAlive,5000);
 
         Handler recvHandler = getCycledHandler("recv");
+        final MainActivity tActivity = this;
         Runnable recv = new Runnable() {
             @Override
             public void run() {
@@ -246,9 +256,9 @@ public class MainActivity extends AppCompatActivity {
                             contact.status = Contact.Status.CONFIRM_WAIT;
                             dao.insertContact(new ContactEntity(contact));
                             break;}
-                        case PAIR_ACK:
-                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
-                            if(result==null)    return;
+                        case PAIR_ACK: {
+                            ContactEntity[] result = ContactDB.findContactByUUID(dao, msg.src);
+                            if (result == null) return;
                             Contact contact;
                             try {
                                 contact = result[0].getContact();
@@ -256,13 +266,58 @@ public class MainActivity extends AppCompatActivity {
                                 dao.deleteContact(result[0]);
                                 return;
                             }
-                            if(contact.status== Contact.Status.PAIR_RCVD){
+                            if (contact.status == Contact.Status.PAIR_RCVD) {
                                 contact.status = Contact.Status.CONFIRM_WAIT;
                                 dao.insertContact(new ContactEntity(contact));
                             }
                             break;
+                        }
+                        case CALL:{
+                            ContactEntity[] result = ContactDB.findContactByUUID(dao, msg.src);
+                            if (result == null) return;
+                            Contact contact;
+                            try {
+                                contact = result[0].getContact();
+                            } catch (Crypto.DecryptException e) {
+                                dao.deleteContact(result[0]);
+                                return;
+                            }
+                            Signature s = Signature.getInstance("SHA256withECDSA");
+                            s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
+                            byte[] otherPk = new byte[91];
+                            buf.readBytes(otherPk);
+                            s.update(otherPk);
+                            byte[] sign = new byte[71];
+                            buf.readBytes(sign);
+                            if(!s.verify(sign)){
+                                AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
+                                builder.setTitle(R.string.dangerous);
+                                builder.setMessage(R.string.mitm_warning_msg);
+                                builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
+                                builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
+                                builder.show();
+                                return;
+                            }
+                            switch (talkingViewModel.getStatus()){
+                                case DEAD:
+                                    talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
+                                    talkingViewModel.setContact(contact);
+                                    talkingViewModel.setOtherPk(otherPk);
+                                    navController.navigate(R.id.nav_talking);
+                                    break;
+                                case INCOMING:
+                                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
+                                    talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
+                                    break;
+                                case CALLING:
+                                case TALKING:
+                                case INVOKING:
+                                    return;
+                            }
+                            break;
+                        }
                     }
-                }catch (IndexOutOfBoundsException ignored){}
+                }catch (IndexOutOfBoundsException | SignatureException | InvalidKeySpecException | InvalidKeyException ignored){}
                 catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
                     e.printStackTrace();
                     exit(0);

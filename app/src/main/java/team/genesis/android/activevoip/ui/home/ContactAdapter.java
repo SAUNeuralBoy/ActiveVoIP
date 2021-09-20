@@ -82,10 +82,10 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
             if(result==null)    return;
             AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
-            builder.setTitle("Delete Contact");
-            builder.setMessage("Confirm delete?");
-            builder.setPositiveButton("Yes", (dialog, which) -> dao.deleteContact(result[0]));
-            builder.setNegativeButton("Cancel", (dialog, which) -> {
+            builder.setTitle(R.string.delete_contact);
+            builder.setMessage(R.string.comfirm_delete);
+            builder.setPositiveButton(R.string.yes, (dialog, which) -> dao.deleteContact(result[0]));
+            builder.setNegativeButton(R.string.cancel, (dialog, which) -> {
             });
             builder.show();
         });
@@ -100,7 +100,9 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
                 dao.deleteContact(result[0]);
                 return;
             }
-            new ViewModelProvider(mActivity).get(TalkingViewModel.class).setContact(contact);
+            TalkingViewModel talkingViewModel = new ViewModelProvider(mActivity).get(TalkingViewModel.class);
+            talkingViewModel.setContact(contact);
+            talkingViewModel.setStatus(TalkingViewModel.Status.CALLING);
             Navigation.findNavController(mActivity, R.id.nav_host_fragment).navigate(R.id.nav_talking);
         });
         return holder;
