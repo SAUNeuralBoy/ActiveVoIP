@@ -71,6 +71,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
                 return;
             }
             final EditText input = new EditText(mActivity);
+            input.setText(contact.alias);
             UI.makeInputWindow(mActivity, input, mActivity.getString(R.string.alias_input), (dialog, which) -> {
                 contact.alias = input.getText().toString();
                 dao.insertContact(new ContactEntity(contact));
