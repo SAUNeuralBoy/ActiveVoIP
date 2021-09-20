@@ -38,6 +38,6 @@
     <string name="wait_for_response">Wait for response</string>
     <string name="from_contact_name">From Contact Name</string>
     <string name="from_uuid">From UUID</string>
-    <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="alias_input">Input contact alias</string>
 </resources>

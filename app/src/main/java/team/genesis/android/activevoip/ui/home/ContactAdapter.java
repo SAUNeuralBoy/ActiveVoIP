@@ -1,8 +1,10 @@
 package team.genesis.android.activevoip.ui.home;
 
+import android.content.DialogInterface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -14,6 +16,7 @@ import java.util.List;
 import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.R;
+import team.genesis.android.activevoip.UI;
 import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.db.ContactDB;
 import team.genesis.android.activevoip.db.ContactDao;
@@ -50,6 +53,23 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
             if(result==null)    return;
             dao.deleteContact(result[0]);
+        });
+        holder.buttonEdit.setOnClickListener(v->{
+            ContactDao dao = mActivity.getDao();
+            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(result==null)    return;
+            Contact contact;
+            try {
+                contact = result[0].getContact();
+            } catch (Crypto.DecryptException e) {
+                dao.deleteContact(result[0]);
+                return;
+            }
+            final EditText input = new EditText(mActivity);
+            UI.makeInputWindow(mActivity, input, mActivity.getString(R.string.alias_input), (dialog, which) -> {
+                contact.alias = input.getText().toString();
+                dao.insertContact(new ContactEntity(contact));
+            });
         });
         return holder;
     }
