@@ -1,4 +1,4 @@
-package team.genesis.android.activevoip;
+package team.genesis.android.activevoip.ui.edit;
 
 import android.os.Bundle;
 
@@ -7,6 +7,8 @@ import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+
+import team.genesis.android.activevoip.R;
 
 /**
  * A simple {@link Fragment} subclass.
