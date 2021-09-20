@@ -40,4 +40,6 @@
     <string name="from_uuid">From UUID</string>
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="alias_input">Input contact alias</string>
+    <string name="pair_failed">Pair failed</string>
+    <string name="calling">Calling…</string>
 </resources>
