@@ -1,5 +1,6 @@
 package team.genesis.android.activevoip.ui.home;
 
+import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -70,6 +71,18 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
                 contact.alias = input.getText().toString();
                 dao.insertContact(new ContactEntity(contact));
             });
+        });
+        holder.buttonDelete.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(result==null)    return;
+            AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
+            builder.setTitle("Delete Contact");
+            builder.setMessage("Confirm delete?");
+            builder.setPositiveButton("Yes", (dialog, which) -> dao.deleteContact(result[0]));
+            builder.setNegativeButton("Cancel", (dialog, which) -> {
+            });
+            builder.show();
         });
         return holder;
     }
