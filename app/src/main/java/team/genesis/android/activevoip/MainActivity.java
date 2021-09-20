@@ -88,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
         findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
+        findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
         sp = SPManager.getManager(this);
         host = InetAddress.getLoopbackAddress();
         port = sp.getPort();

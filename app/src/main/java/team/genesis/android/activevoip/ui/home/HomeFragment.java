@@ -55,12 +55,17 @@ public class HomeFragment extends Fragment {
     @Override
     public void onStop() {
         super.onStop();
+        requireActivity().findViewById(R.id.button_edit).setVisibility(View.GONE);
         requireActivity().findViewById(R.id.button_add).setVisibility(View.GONE);
+        requireActivity().findViewById(R.id.button_compass).setVisibility(View.GONE);
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        requireActivity().findViewById(R.id.button_edit).setVisibility(View.VISIBLE);
         requireActivity().findViewById(R.id.button_add).setVisibility(View.VISIBLE);
+        requireActivity().findViewById(R.id.button_compass).setVisibility(View.VISIBLE);
+
     }
 }

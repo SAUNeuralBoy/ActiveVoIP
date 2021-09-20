@@ -23,9 +23,17 @@
             android:gravity="end" >
 
             <ImageButton
+                android:id="@+id/button_edit"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:backgroundTint="#00FFFFFF"
+                app:srcCompat="@android:drawable/ic_menu_edit"
+                />
+
+            <ImageButton
                 android:id="@+id/button_add"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:background="#00FF0000"
                 app:srcCompat="@android:drawable/ic_input_add"
                 app:tint="#FFFFFF" />
@@ -33,7 +41,7 @@
             <ImageButton
                 android:id="@+id/button_compass"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:background="#00FF0000"
                 app:srcCompat="@android:drawable/ic_menu_compass"
                 app:tint="#FF0000" />

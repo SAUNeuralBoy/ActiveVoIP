@@ -39,6 +39,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.3.1'
     implementation 'androidx.security:security-crypto:1.0.0-rc01'
     implementation 'androidx.room:room-runtime:2.3.0'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     annotationProcessor 'androidx.room:room-compiler:2.3.0'
     implementation 'io.netty:netty-all:4.1.4.Final'
     implementation 'com.google.code.gson:gson:2.8.4'
