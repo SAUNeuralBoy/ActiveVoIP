@@ -1,5 +1,7 @@
 package team.genesis.data;
 
+import androidx.annotation.Nullable;
+
 import java.security.SecureRandom;
 import java.util.Arrays;
 
@@ -26,5 +28,11 @@ public class UUID {
     }
     public UUID(byte[] bytes,int offset){
         fromBytes(bytes,offset);
+    }
+
+    @Override
+    public boolean equals(@Nullable Object obj) {
+        if(!(obj instanceof UUID)) return false;
+        return Arrays.equals(getBytes(),((UUID)obj).getBytes());
     }
 }
