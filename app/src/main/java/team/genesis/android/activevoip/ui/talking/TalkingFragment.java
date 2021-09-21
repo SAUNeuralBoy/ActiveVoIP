@@ -11,7 +11,6 @@ import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import android.os.Handler;
-import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,7 +20,6 @@ import android.widget.TextView;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -30,7 +28,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.SignatureException;
@@ -62,12 +59,14 @@ public class TalkingFragment extends Fragment {
 
     private TalkingViewModel viewModel;
     private Contact contact;
-    private TextView status;
+    private TextView textStatus;
     private Handler uiHandler;
     private MainActivity activity;
     private byte[] derivedKey;
     private UUID ourId;
     private UUID otherId;
+    private KeyPair kp;
+    private Observer<TalkingViewModel.Status> statusObserver;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -80,23 +79,62 @@ public class TalkingFragment extends Fragment {
         activity = (MainActivity) requireActivity();
         viewModel = new ViewModelProvider(requireActivity()).get(TalkingViewModel.class);
         View root = inflater.inflate(R.layout.fragment_talking, container, false);
-        status = root.findViewById(R.id.status_talking);
+        textStatus = root.findViewById(R.id.status_talking);
         contact = viewModel.getContact();
         uiHandler = new Handler();
         NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment);
+        statusObserver = status -> {
+            switch (status) {
+                case TALKING:
+                    textStatus.setText(Crypto.bytesToHex(derivedKey, ":"));
+                    root.findViewById(R.id.layout_incoming_action).setVisibility(View.GONE);
+                    break;
+                case REJECTED: {
+                    UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
+                    navController.navigate(R.id.nav_home);
+                    return;
+                }
+                case CALL_ACCEPTED: {
+                    try {
+                        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+                        ka.init(kp.getPrivate());
+                        ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(viewModel.getOtherPk())), true);
+                        byte[] sharedSecret = ka.generateSecret();
+                        MessageDigest hash = MessageDigest.getInstance("SHA-256");
+                        hash.update(sharedSecret);
+                        // Simple deterministic ordering
+                        List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(kp.getPublic().getEncoded()), ByteBuffer.wrap(viewModel.getOtherPk()));
+                        Collections.sort(keys);
+                        hash.update(keys.get(0));
+                        hash.update(keys.get(1));
+                        derivedKey = hash.digest();
+                        ourId = new UUID(Crypto.md5(kp.getPublic().getEncoded()));
+                        otherId = new UUID(Crypto.md5(viewModel.getOtherPk()));
+                        ByteBuf ack = Unpooled.buffer();
+                        ack.writeInt(Ctrl.CALL_ACK.ordinal());
+                        activity.write(ack.array(), viewModel.getContact().uuid);
+                        viewModel.setStatus(TalkingViewModel.Status.TALKING);
+                        return;
+                    } catch (NoSuchAlgorithmException e) {
+                        e.printStackTrace();
+                        exit(0);
+                    } catch (InvalidKeyException | InvalidKeySpecException e) {
+                        UI.makeSnackBar(TalkingFragment.this.getView(), TalkingFragment.this.getString(R.string.pair_failed));
+                        navController.navigate(R.id.nav_home);
+                        return;
+                    }
+                    break;
+                }
 
-        viewModel.isReadyToTalk().observe(getViewLifecycleOwner(), aBoolean -> {
-            if(aBoolean&&viewModel.getStatus()!=TalkingViewModel.Status.TALKING){
-                viewModel.setStatus(TalkingViewModel.Status.TALKING);
-                status.setText(Crypto.bytesToHex(derivedKey,":"));
             }
-        });
+        };
+        viewModel.getLiveStatus().observe(getViewLifecycleOwner(), statusObserver);
 
         switch (viewModel.getStatus()){
             case CALLING:{ try {
                 KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
                 kpg.initialize(256);
-                KeyPair kp = kpg.generateKeyPair();
+                kp = kpg.generateKeyPair();
                 byte[] ourPk = kp.getPublic().getEncoded();
                 ByteBuf buf = Unpooled.buffer();
                 buf.writeInt(Ctrl.CALL.ordinal());
@@ -113,47 +151,13 @@ public class TalkingFragment extends Fragment {
                     Runnable r = new Runnable() {
                         @Override
                         public void run() {
-                            if(viewModel.getStatus()== TalkingViewModel.Status.REJECTED){
-                                UI.makeSnackBar(root,getString(R.string.call_refused));
-                                navController.navigate(R.id.nav_home);
-                                return;
-                            }
-                            if(viewModel.getStatus()== TalkingViewModel.Status.CALL_ACCEPTED){try {
-                                KeyAgreement ka = KeyAgreement.getInstance("ECDH");
-                                ka.init(kp.getPrivate());
-                                ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(viewModel.getOtherPk())), true);
-                                byte[] sharedSecret = ka.generateSecret();
-                                MessageDigest hash = MessageDigest.getInstance("SHA-256");
-                                hash.update(sharedSecret);
-                                // Simple deterministic ordering
-                                List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(ourPk), ByteBuffer.wrap(viewModel.getOtherPk()));
-                                Collections.sort(keys);
-                                hash.update(keys.get(0));
-                                hash.update(keys.get(1));
-                                derivedKey = hash.digest();
-                                ourId = new UUID(Crypto.md5(ourPk));
-                                otherId = new UUID(Crypto.md5(viewModel.getOtherPk()));
-                                ByteBuf ack = Unpooled.buffer();
-                                ack.writeInt(Ctrl.CALL_ACK.ordinal());
-                                activity.write(ack.array(),viewModel.getContact().uuid);
-                                viewModel.setReadyToTalk(true);
-                                return;
-                            }catch (NoSuchAlgorithmException e) {
-                                e.printStackTrace();
-                                exit(0);
-                            } catch (InvalidKeyException | InvalidKeySpecException e) {
-                                UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-                                navController.navigate(R.id.nav_home);
-                                return;
-                            }
-                            }
                             if (viewModel.getStatus()!= TalkingViewModel.Status.CALLING) return;
                             activity.write(buf.array(), contact.uuid);
                             uiHandler.postDelayed(this, 1000);
                         }
                     };
                     uiHandler.post(r);
-                    status.setText(R.string.calling);
+                    textStatus.setText(R.string.calling);
 
                 } else {
                     UI.makeSnackBar(getView(), getString(R.string.pair_failed));
@@ -169,7 +173,7 @@ public class TalkingFragment extends Fragment {
             break;
             }
             case INVOKING:
-                status.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.bytesToHex(contact.pkSHA256(),":")));
+                textStatus.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.bytesToHex(contact.pkSHA256(),":")));
                 root.findViewById(R.id.layout_incoming_action).setVisibility(View.VISIBLE);
                 Runnable r = new Runnable() {
                     @Override
@@ -266,6 +270,7 @@ public class TalkingFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         viewModel.setStatus(TalkingViewModel.Status.DEAD);
+        viewModel.getLiveStatus().removeObserver(statusObserver);
     }
 
     @Override

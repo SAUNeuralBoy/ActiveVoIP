@@ -7,13 +7,11 @@ import team.genesis.android.activevoip.data.Contact;
 
 public class TalkingViewModel extends ViewModel {
     private Contact mContact;
-    private Status mStatus;
     private byte[] mOtherPk;
     private byte[] mOurPk;
-    private final MutableLiveData<Boolean> mReadyToTalk;
+    private final MutableLiveData<Status> mLiveStatus;
     public TalkingViewModel(){
-        mStatus = Status.DEAD;
-        mReadyToTalk = new MutableLiveData<>(false);
+        mLiveStatus = new MutableLiveData<>(Status.DEAD);
 
     }
     public void setOtherPk(byte[] otherPk){
@@ -29,10 +27,13 @@ public class TalkingViewModel extends ViewModel {
         return mOurPk;
     }
     public void setStatus(Status status){
-        mStatus = status;
+        mLiveStatus.setValue(status);
     }
     public Status getStatus(){
-        return mStatus;
+        return mLiveStatus.getValue();
+    }
+    public MutableLiveData<Status> getLiveStatus(){
+        return mLiveStatus;
     }
     public void setContact(Contact contact){
         mContact = contact;
@@ -42,11 +43,5 @@ public class TalkingViewModel extends ViewModel {
     }
     public enum Status{
         CALLING,INVOKING,INCOMING,REJECTED, ACCEPT_CALL,CALL_ACCEPTED,TALKING,DEAD
-    }
-    public void setReadyToTalk(boolean ready){
-        if(mReadyToTalk.getValue()==null|| mReadyToTalk.getValue()!=ready) mReadyToTalk.setValue(ready);
-    }
-    public MutableLiveData<Boolean> isReadyToTalk(){
-        return mReadyToTalk;
     }
 }

@@ -332,7 +332,7 @@ public class MainActivity extends AppCompatActivity {
                             if(contact.status!= Contact.Status.READY)   return;
                             if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
                             if(talkingViewModel.getStatus()!= TalkingViewModel.Status.ACCEPT_CALL)  return;
-                            talkingViewModel.setReadyToTalk(true);
+                            talkingViewModel.setStatus(TalkingViewModel.Status.TALKING);
                             break;
                         }
                     }
