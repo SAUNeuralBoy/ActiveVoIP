@@ -101,10 +101,11 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
         sp = SPManager.getManager(this);
         host = InetAddress.getLoopbackAddress();
-        port = sp.getPort();
         try {
-            writeTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
-            listenTunnel = new UDPActiveDatagramTunnel(host,sp.getPort(),sp.getUUID());
+            writeTunnel = new UDPActiveDatagramTunnel(host,10113,new UUID());
+            listenTunnel = new UDPActiveDatagramTunnel(host,10113,new UUID());
+            setHost(host,sp.getPort());
+            setUUID(sp.getUUID());
         } catch (SocketException e) {
             e.printStackTrace();
             exit(0);
