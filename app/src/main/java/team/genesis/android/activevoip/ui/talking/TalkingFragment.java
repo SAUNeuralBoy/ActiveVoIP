@@ -118,7 +118,7 @@ public class TalkingFragment extends Fragment {
             break;
             }
             case INVOKING:
-                status.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.to64(contact.pkSHA256())));
+                status.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.bytesToHex(contact.pkSHA256(),":")));
                 root.findViewById(R.id.layout_incoming_action).setVisibility(View.VISIBLE);
                 Runnable r = new Runnable() {
                     @Override
