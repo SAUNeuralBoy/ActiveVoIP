@@ -39,6 +39,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.MainActivity;
+import team.genesis.android.activevoip.Network;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.UI;
 import team.genesis.android.activevoip.data.Contact;
@@ -83,7 +84,7 @@ public class TalkingFragment extends Fragment {
                 byte[] ourPk = kp.getPublic().getEncoded();
                 ByteBuf buf = Unpooled.buffer();
                 buf.writeInt(Ctrl.CALL.ordinal());
-                buf.writeBytes(ourPk);
+                Network.writeBytes(buf,ourPk);
                 Signature s = Signature.getInstance("SHA256withECDSA");
                 KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
                 keyStore.load(null);
@@ -91,8 +92,7 @@ public class TalkingFragment extends Fragment {
                     s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
                     s.update(ourPk);
                     byte[] sign = s.sign();
-                    buf.writeInt(sign.length);
-                    buf.writeBytes(sign);
+                    Network.writeBytes(buf,sign);
                     Runnable r = new Runnable() {
                         @Override
                         public void run() {

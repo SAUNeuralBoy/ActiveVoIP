@@ -192,7 +192,6 @@ public class MainActivity extends AppCompatActivity {
                     ByteBuf repBuf = Unpooled.buffer();
                     switch (Ctrl.values()[buf.readInt()]) {
                         case PAIR:{
-                            if (buf.readableBytes() < 91) return;
                             KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
                             kpg.initialize(new KeyGenParameterSpec.Builder(
                                     Crypto.to64(msg.src.getBytes()),
@@ -211,26 +210,25 @@ public class MainActivity extends AppCompatActivity {
                             }
                             contact.uuid = msg.src;
                             contact.ourPk = kp.getPublic().getEncoded();
-                            buf.readBytes(contact.otherPk, 0, 91);
+
+                            contact.otherPk = Network.readNbytes(buf,500);
 
                             repBuf.writeInt(Ctrl.PAIR_RESPONSE.ordinal());
-                            repBuf.writeBytes(contact.ourPk);
-                            repBuf.writeBytes(contact.otherPk);
+                            Network.writeBytes(repBuf,contact.ourPk);
+                            Network.writeBytes(repBuf,contact.otherPk);
                             write(repBuf.array(),msg.src);
 
                             contact.status = Contact.Status.PAIR_RCVD;
                             dao.insertContact(new ContactEntity(contact));
                             break;}
                         case PAIR_RESPONSE:{
-                            if (buf.readableBytes() < 91*2) return;
                             ContactEntity result = ContactDB.findContactByUUID(dao,msg.src);
                             if(result==null)    return;
                             Contact contact = ContactDB.getContactOrDelete(dao,result);
                             if(contact==null)   return;
                             if(contact.status!= Contact.Status.PAIR_SENT)   return;
-                            buf.readBytes(contact.otherPk,0,91);
-                            byte[] chk = new byte[91];
-                            buf.readBytes(chk,0,91);
+                            contact.otherPk = Network.readNbytes(buf,500);
+                            byte[] chk = Network.readNbytes(buf,500);
                             if(!Arrays.equals(contact.ourPk,chk))   return;
                             try {
                                 KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
@@ -262,11 +260,9 @@ public class MainActivity extends AppCompatActivity {
                             if(contact.status!= Contact.Status.READY)   return;
                             Signature s = Signature.getInstance("SHA256withECDSA");
                             s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
-                            byte[] otherPk = new byte[91];
-                            buf.readBytes(otherPk);
+                            byte[] otherPk = Network.readNbytes(buf,500);
                             s.update(otherPk);
-                            byte[] sign = new byte[buf.readInt()];
-                            buf.readBytes(sign);
+                            byte[] sign = Network.readNbytes(buf,500);
                             if(!s.verify(sign)){
                                 AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
                                 builder.setTitle(R.string.dangerous);
@@ -439,7 +435,7 @@ public class MainActivity extends AppCompatActivity {
         }
         KeyPair kp = kpg.generateKeyPair();
         contact.ourPk = kp.getPublic().getEncoded();
-        buf.writeBytes(contact.ourPk);
+        Network.writeBytes(buf,contact.ourPk);
         write(buf.array(),contact.uuid);
         contact.status = Contact.Status.PAIR_SENT;
         dao.insertContact(new ContactEntity(contact));

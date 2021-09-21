@@ -25,7 +25,6 @@ public class Contact {
     public byte[] otherPk;
     public Contact(){
         alias = "";
-        otherPk = new byte[91];
     }
     public byte[] pkSHA256(){
         MessageDigest sha;
