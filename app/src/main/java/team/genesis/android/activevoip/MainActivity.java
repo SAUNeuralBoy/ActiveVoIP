@@ -27,6 +27,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.room.Room;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
@@ -281,6 +282,7 @@ public class MainActivity extends AppCompatActivity {
                                     break;
                                 case INCOMING:
                                     if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
+                                    if(!Arrays.equals(otherPk,talkingViewModel.getOtherPk()))   return;
                                     talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
                                     break;
                                 case CALLING:
