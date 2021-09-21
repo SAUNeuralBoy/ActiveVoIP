@@ -78,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         talkingViewModel = new ViewModelProvider(this).get(TalkingViewModel.class);
         writeHandler = getCycledHandler("keepalive");
-        dao = ((ContactDB)Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build()).getDao();
+        dao = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build().getDao();
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -202,16 +202,12 @@ public class MainActivity extends AppCompatActivity {
                                     .build());
                             KeyPair kp = kpg.generateKeyPair();
                             Contact contact;
-                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
+                            ContactEntity result = ContactDB.findContactByUUID(dao,msg.src);
                             if(result==null)
                                 contact = new Contact();
                             else {
-                                try {
-                                    contact = result[0].getContact();
-                                } catch (Crypto.DecryptException e) {
-                                    dao.deleteContact(result[0]);
-                                    contact = new Contact();
-                                }
+                                contact = ContactDB.getContactOrDelete(dao,result);
+                                if(contact==null)   return;
                             }
                             contact.uuid = msg.src;
                             contact.ourPk = kp.getPublic().getEncoded();
@@ -227,15 +223,10 @@ public class MainActivity extends AppCompatActivity {
                             break;}
                         case PAIR_RESPONSE:{
                             if (buf.readableBytes() < 91*2) return;
-                            ContactEntity[] result = ContactDB.findContactByUUID(dao,msg.src);
+                            ContactEntity result = ContactDB.findContactByUUID(dao,msg.src);
                             if(result==null)    return;
-                            Contact contact;
-                            try {
-                                contact = result[0].getContact();
-                            } catch (Crypto.DecryptException e) {
-                                dao.deleteContact(result[0]);
-                                return;
-                            }
+                            Contact contact = ContactDB.getContactOrDelete(dao,result);
+                            if(contact==null)   return;
                             if(contact.status!= Contact.Status.PAIR_SENT)   return;
                             buf.readBytes(contact.otherPk,0,91);
                             byte[] chk = new byte[91];
@@ -257,15 +248,8 @@ public class MainActivity extends AppCompatActivity {
                             dao.insertContact(new ContactEntity(contact));
                             break;}
                         case PAIR_ACK: {
-                            ContactEntity[] result = ContactDB.findContactByUUID(dao, msg.src);
-                            if (result == null) return;
-                            Contact contact;
-                            try {
-                                contact = result[0].getContact();
-                            } catch (Crypto.DecryptException e) {
-                                dao.deleteContact(result[0]);
-                                return;
-                            }
+                            Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                            if(contact==null)   return;
                             if (contact.status == Contact.Status.PAIR_RCVD) {
                                 contact.status = Contact.Status.CONFIRM_WAIT;
                                 dao.insertContact(new ContactEntity(contact));
@@ -273,15 +257,9 @@ public class MainActivity extends AppCompatActivity {
                             break;
                         }
                         case CALL:{
-                            ContactEntity[] result = ContactDB.findContactByUUID(dao, msg.src);
-                            if (result == null) return;
-                            Contact contact;
-                            try {
-                                contact = result[0].getContact();
-                            } catch (Crypto.DecryptException e) {
-                                dao.deleteContact(result[0]);
-                                return;
-                            }
+                            Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                            if(contact==null)   return;
+                            if(contact.status!= Contact.Status.READY)   return;
                             Signature s = Signature.getInstance("SHA256withECDSA");
                             s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
                             byte[] otherPk = new byte[91];

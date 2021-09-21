@@ -41,35 +41,21 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         });
         holder.buttonAccept.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();
-            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
-            if(result==null)    return;
-            Contact contact;
-            try {
-                contact = result[0].getContact();
-            } catch (Crypto.DecryptException e) {
-                dao.deleteContact(result[0]);
-                return;
-            }
+            Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(contact==null)   return;
             contact.status = Contact.Status.READY;
             dao.insertContact(new ContactEntity(contact));
         });
         holder.buttonReject.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();
-            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            ContactEntity result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
             if(result==null)    return;
-            dao.deleteContact(result[0]);
+            dao.deleteContact(result);
         });
         holder.buttonEdit.setOnClickListener(v->{
             ContactDao dao = mActivity.getDao();
-            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
-            if(result==null)    return;
-            Contact contact;
-            try {
-                contact = result[0].getContact();
-            } catch (Crypto.DecryptException e) {
-                dao.deleteContact(result[0]);
-                return;
-            }
+            Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(contact==null)   return;
             final EditText input = new EditText(mActivity);
             input.setText(contact.alias);
             UI.makeInputWindow(mActivity, input, mActivity.getString(R.string.alias_input), (dialog, which) -> {
@@ -79,27 +65,20 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         });
         holder.buttonDelete.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();
-            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            ContactEntity result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
             if(result==null)    return;
             AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
             builder.setTitle(R.string.delete_contact);
             builder.setMessage(R.string.comfirm_delete);
-            builder.setPositiveButton(R.string.yes, (dialog, which) -> dao.deleteContact(result[0]));
+            builder.setPositiveButton(R.string.yes, (dialog, which) -> dao.deleteContact(result));
             builder.setNegativeButton(R.string.cancel, (dialog, which) -> {
             });
             builder.show();
         });
         holder.buttonCall.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();
-            ContactEntity[] result = ContactDB.findContactByUUID(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
-            if(result==null)    return;
-            Contact contact;
-            try {
-                contact = result[0].getContact();
-            } catch (Crypto.DecryptException e) {
-                dao.deleteContact(result[0]);
-                return;
-            }
+            Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(contact==null)   return;
             TalkingViewModel talkingViewModel = new ViewModelProvider(mActivity).get(TalkingViewModel.class);
             talkingViewModel.setContact(contact);
             talkingViewModel.setStatus(TalkingViewModel.Status.CALLING);
