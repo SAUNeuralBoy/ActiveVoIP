@@ -296,8 +296,43 @@ public class MainActivity extends AppCompatActivity {
                             Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
                             if(contact==null)   return;
                             if(contact.status!= Contact.Status.READY)   return;
+                            if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
                             if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
                             talkingViewModel.setStatus(TalkingViewModel.Status.REJECTED);
+                            break;
+                        }
+                        case CALL_RESPONSE:{
+                            Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                            if(contact==null)   return;
+                            if(contact.status!= Contact.Status.READY)   return;
+                            if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
+                            if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
+                            Signature s = Signature.getInstance("SHA256withECDSA");
+                            s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
+                            byte[] otherPk = Network.readNbytes(buf,500);
+                            s.update(otherPk);
+                            byte[] sign = Network.readNbytes(buf,500);
+                            if(!s.verify(sign)){
+                                AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
+                                builder.setTitle(R.string.dangerous);
+                                builder.setMessage(R.string.mitm_warning_msg);
+                                builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
+                                builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
+                                builder.show();
+                                return;
+                            }
+                            if(!Arrays.equals(talkingViewModel.getOurPk(),Network.readNbytes(buf,500))) return;
+                            talkingViewModel.setOtherPk(otherPk);
+                            talkingViewModel.setStatus(TalkingViewModel.Status.CALL_ACCEPTED);
+                            break;
+                        }
+                        case CALL_ACK:{
+                            Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                            if(contact==null)   return;
+                            if(contact.status!= Contact.Status.READY)   return;
+                            if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
+                            if(talkingViewModel.getStatus()!= TalkingViewModel.Status.ACCEPT_CALL)  return;
+                            talkingViewModel.setReadyToTalk(true);
                             break;
                         }
                     }
