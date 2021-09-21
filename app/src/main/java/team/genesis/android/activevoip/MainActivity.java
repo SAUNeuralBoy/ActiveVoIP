@@ -290,6 +290,14 @@ public class MainActivity extends AppCompatActivity {
                             }
                             break;
                         }
+                        case CALL_REJECT:{
+                            Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                            if(contact==null)   return;
+                            if(contact.status!= Contact.Status.READY)   return;
+                            if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
+                            talkingViewModel.setStatus(TalkingViewModel.Status.REJECTED);
+                            break;
+                        }
                     }
                 }catch (IndexOutOfBoundsException | SignatureException | InvalidKeySpecException | InvalidKeyException ignored){}
                 catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {

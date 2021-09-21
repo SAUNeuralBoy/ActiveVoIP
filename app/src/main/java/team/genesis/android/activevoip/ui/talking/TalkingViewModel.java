@@ -30,6 +30,6 @@ public class TalkingViewModel extends ViewModel {
         return mContact;
     }
     public enum Status{
-        CALLING,INVOKING,INCOMING,TALKING,DEAD
+        CALLING,INVOKING,INCOMING,REJECTED,TALKING,DEAD
     }
 }

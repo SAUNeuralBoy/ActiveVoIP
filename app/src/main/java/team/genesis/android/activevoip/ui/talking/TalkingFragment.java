@@ -55,6 +55,7 @@ public class TalkingFragment extends Fragment {
     private Contact contact;
     private TextView status;
     private Handler uiHandler;
+    private MainActivity activity;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,6 +65,7 @@ public class TalkingFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
+        activity = (MainActivity) requireActivity();
         viewModel = new ViewModelProvider(requireActivity()).get(TalkingViewModel.class);
         View root = inflater.inflate(R.layout.fragment_talking, container, false);
         status = root.findViewById(R.id.status_talking);
@@ -96,8 +98,13 @@ public class TalkingFragment extends Fragment {
                     Runnable r = new Runnable() {
                         @Override
                         public void run() {
+                            if(viewModel.getStatus()== TalkingViewModel.Status.REJECTED){
+                                UI.makeSnackBar(root,getString(R.string.call_refused));
+                                navController.navigate(R.id.nav_home);
+                                return;
+                            }
                             if (viewModel.getStatus()!= TalkingViewModel.Status.CALLING) return;
-                            ((MainActivity) requireActivity()).write(buf.array(), contact.uuid);
+                            activity.write(buf.array(), contact.uuid);
                             uiHandler.postDelayed(this, 1000);
                         }
                     };
@@ -134,6 +141,12 @@ public class TalkingFragment extends Fragment {
                 uiHandler.post(r);
                 break;
         }
+        root.findViewById(R.id.button_reject_call).setOnClickListener(v -> {
+            ByteBuf buf = Unpooled.buffer();
+            buf.writeInt(Ctrl.CALL_REJECT.ordinal());
+            activity.write(buf.array(),contact.uuid);
+            navController.navigate(R.id.nav_home);
+        });
         return root;
     }
     @Override
