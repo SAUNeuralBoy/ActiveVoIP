@@ -90,7 +90,9 @@ public class TalkingFragment extends Fragment {
                 if (keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) {
                     s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
                     s.update(ourPk);
-                    buf.writeBytes(s.sign());
+                    byte[] sign = s.sign();
+                    buf.writeInt(sign.length);
+                    buf.writeBytes(sign);
                     Runnable r = new Runnable() {
                         @Override
                         public void run() {

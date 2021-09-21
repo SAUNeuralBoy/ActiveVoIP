@@ -265,7 +265,7 @@ public class MainActivity extends AppCompatActivity {
                             byte[] otherPk = new byte[91];
                             buf.readBytes(otherPk);
                             s.update(otherPk);
-                            byte[] sign = new byte[71];
+                            byte[] sign = new byte[buf.readInt()];
                             buf.readBytes(sign);
                             if(!s.verify(sign)){
                                 AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
