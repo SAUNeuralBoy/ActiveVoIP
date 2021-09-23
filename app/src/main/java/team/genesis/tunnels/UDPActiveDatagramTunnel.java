@@ -19,6 +19,9 @@ public class UDPActiveDatagramTunnel extends ActiveDatagramTunnel{
         setHost(hostAddr, port);
     }
 
+    public UUID getSrc(){
+        return src;
+    }
     public int getPort() {
         return port;
     }

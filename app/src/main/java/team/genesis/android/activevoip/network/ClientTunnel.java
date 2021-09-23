@@ -4,7 +4,6 @@ import android.os.Handler;
 
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LiveData;
-import androidx.lifecycle.Observer;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -16,8 +15,6 @@ import team.genesis.network.DNSLookupThread;
 import team.genesis.tunnels.ActiveDatagramTunnel;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
 
-import static java.lang.System.exit;
-
 public class ClientTunnel extends UDPActiveDatagramTunnel {
 
     private final Handler writeHandler,recvHandler,dnsHandler;
@@ -25,14 +22,14 @@ public class ClientTunnel extends UDPActiveDatagramTunnel {
 
     private String mHostName;
 
-    public ClientTunnel(String threadPrefix,InetAddress hostAddr, int port, UUID src) throws SocketException {
-        super(hostAddr,port,src);
+    public ClientTunnel(String threadPrefix,String hostName, int port, UUID src) throws SocketException {
+        super(InetAddress.getLoopbackAddress(),port,src);
 
         writeHandler = UI.getCycledHandler(threadPrefix +"write");
         recvHandler = UI.getCycledHandler(threadPrefix +"recv");
         dnsHandler = UI.getCycledHandler(threadPrefix +"dns");
         mListener = msg -> {};
-        mHostName = "127.0.0.1";
+        mHostName = hostName;
         Runnable keepsAlive = new Runnable() {
             @Override
             public void run() {
@@ -90,11 +87,34 @@ public class ClientTunnel extends UDPActiveDatagramTunnel {
             }
         });
     }
+
+    @Override
+    public void send(byte[] data, UUID dst) {
+        send(data,dst,getSrc());
+    }
+
     public void setRecvListener(RecvListener listener){
         mListener = listener;
     }
 
+    public void observe(LifecycleOwner owner,LiveData<Preference> liveData){
+        liveData.observe(owner, pref -> {
+            update(pref.mHostName);
+            setPort(pref.mPort);
+            setSrc(pref.mId);
+        });
+    }
     public interface RecvListener{
         void onRecv(ActiveDatagramTunnel.Incoming msg);
+    }
+    public static class Preference{
+        UUID mId;
+        String mHostName;
+        int mPort;
+        public Preference(UUID uuid,String hostName,int port){
+            mId = uuid;
+            mHostName = hostName;
+            mPort = port;
+        }
     }
 }

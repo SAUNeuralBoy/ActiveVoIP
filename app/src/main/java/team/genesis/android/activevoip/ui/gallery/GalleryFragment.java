@@ -42,7 +42,7 @@ public class GalleryFragment extends Fragment {
         SPManager sp = SPManager.getManager((MainActivity) getActivity());
         inputHostname.setText(sp.getHostname());
         inputPort.setText(String.valueOf(sp.getPort()));
-        Handler networkHandler = MainActivity.getCycledHandler("network_test");
+        Handler networkHandler = UI.getCycledHandler("network_test");
         Handler uiHandler = new Handler();
 
         view.findViewById(R.id.button_test).setOnClickListener(v -> {

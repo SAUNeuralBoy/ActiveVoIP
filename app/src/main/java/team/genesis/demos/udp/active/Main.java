@@ -19,7 +19,6 @@ public class Main {
         UUID uuid = new UUID(args[2].getBytes(StandardCharsets.ISO_8859_1));
         UDPActiveDatagramTunnel tunnel = new UDPActiveDatagramTunnel(InetAddress.getByName(hostName),port,uuid);
         tunnel.keepAlive();
-        tunnel.startAliveThread();
         for(;;)
             System.out.println(new String(tunnel.recv().data,StandardCharsets.UTF_8));
     }
