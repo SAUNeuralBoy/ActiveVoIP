@@ -7,22 +7,26 @@ import java.io.IOException;
 import java.net.*;
 import java.util.Arrays;
 
-public class UDPActiveDatagramTunnel extends ActiveDatagramTunnel implements Runnable{
+public class UDPActiveDatagramTunnel extends ActiveDatagramTunnel{
     public static final int PACK_LEN = 32768;
-    public static final long TTL = 30000;
     private UUID src;
     private final DatagramSocket sock;
     private InetAddress hostAddr;
     private int port;
-    private long interval;
-    private int alivePacketCount;
-    private Thread aliveThread;
     public UDPActiveDatagramTunnel(InetAddress hostAddr, int port, UUID src) throws SocketException {
         setSrc(src);
         sock = new DatagramSocket();
         setHost(hostAddr, port);
-        setAlive(TTL/5,1);
-        aliveThread = new Thread(this);
+    }
+
+    public int getPort() {
+        return port;
+    }
+    public InetAddress getHostAddr(){
+        return hostAddr;
+    }
+    public void setPort(int port){
+        this.port = port;
     }
 
     @Override
@@ -76,37 +80,5 @@ public class UDPActiveDatagramTunnel extends ActiveDatagramTunnel implements Run
     }
     public static UDPProbe getProbe(int timeOut) throws SocketException {
         return new UDPProbe(timeOut);
-    }
-
-    public void setAlive(long interval,int count){
-        this.interval = interval;
-        this.alivePacketCount = count;
-    }
-    @Override
-    public void run() {
-        while (true) {
-            try {
-                for (int i = 0; i < alivePacketCount; i++)
-                    keepAlive();
-                //noinspection BusyWait
-                Thread.sleep(interval);
-            } catch (InterruptedException | IOException e) {
-                return;
-            }
-        }
-    }
-    public boolean startAliveThread(){
-        if(isThreadAlive())   return false;
-        if(aliveThread.getState() != Thread.State.NEW)
-            aliveThread = new Thread(this);
-        aliveThread.start();
-        return true;
-    }
-    public void stopAliveThread(){
-        if(isThreadAlive())
-            aliveThread.interrupt();
-    }
-    public boolean isThreadAlive(){
-        return aliveThread.isAlive();
     }
 }
