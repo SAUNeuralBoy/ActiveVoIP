@@ -2,8 +2,11 @@ package team.genesis.android.activevoip;
 
 import android.app.Service;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Binder;
 import android.os.Handler;
@@ -26,7 +29,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
+import team.genesis.android.activevoip.voip.AudioCodec;
 import team.genesis.data.UUID;
+import team.genesis.tunnels.ActiveDatagramTunnel;
 
 import static java.lang.System.exit;
 
@@ -64,7 +69,10 @@ public class VoIPService extends Service {
 
     }
     public void startTalking(){
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
+        AudioCodec.audio_codec_init(20);
+
+
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*4;
         AudioRecord audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
         isRecording = true;
@@ -77,12 +85,41 @@ public class VoIPService extends Service {
                 recordHandler.postDelayed(this,20);
                 int len = audioRecord.read(buf,0,recordBufSize);
                 if(len>0){
-
+                    byte[] encoded = new byte[len];
+                    write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
                 }
             }
         };
         recordHandler.post(r);
 
+        AudioTrack audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
+        .setSampleRate(SAMPLE_RATE)
+        .setChannelMask(CHANNEL).build())
+        .setBufferSizeInBytes(recordBufSize)
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()).build();
+        tunnel.setRecvListener(new ClientTunnel.RecvListener() {
+            @Override
+            public void onRecv(ActiveDatagramTunnel.Incoming msg) {
+                if(!msg.src.equals(otherId))    return;
+                Request req;
+                try {
+                    req = parse(msg.data);
+                } catch (Crypto.DecryptException e) {
+                    return;
+                }
+                switch (req.ctrl){
+                    case TALK_PACK:
+                        byte[] sample = new byte[recordBufSize];
+                        int len = AudioCodec.audio_decode(req.data,0,req.data.length,sample,0);
+                        if(len<=0)  return;
+                        audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
+                        break;
+                }
+            }
+        });
     }
     private void write(Ctrl ctrl, byte[] data){try {
         ByteBuf buf = Unpooled.buffer();
