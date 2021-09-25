@@ -16,6 +16,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
+import androidx.annotation.NonNull;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -66,6 +67,8 @@ import team.genesis.tunnels.active.datagram.udp.UDPProbe;
 import static java.lang.System.exit;
 
 public class MainActivity extends AppCompatActivity {
+
+    public static final int REQ_CODE_PERMISSION = 1001;
 
     private AppBarConfiguration mAppBarConfiguration;
 
@@ -405,5 +408,19 @@ public class MainActivity extends AppCompatActivity {
     }
     public void update(){
         viewModel.getPrefLiveData().setValue(new ClientTunnel.Preference(sp.getUUID(),sp.getHostname(),sp.getPort()));
+    }
+    public String getHostname(){
+        return sp.getHostname();
+    }
+    public int getPort(){
+        return sp.getPort();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(requestCode==REQ_CODE_PERMISSION){
+            exit(0);
+        }
     }
 }

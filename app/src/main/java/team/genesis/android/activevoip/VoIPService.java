@@ -1,7 +1,11 @@
 package team.genesis.android.activevoip;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -9,8 +13,11 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+
+import androidx.core.app.NotificationCompat;
 
 import java.net.SocketException;
 import java.security.InvalidAlgorithmParameterException;
@@ -50,13 +57,50 @@ public class VoIPService extends Service {
     public VoIPService(){
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
-            cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding",cipherEncrypt.getProvider());
         } catch (NoSuchPaddingException | NoSuchAlgorithmException e) {
             e.printStackTrace();
             exit(0);
         }
     }
-    public void init(UUID ourId,UUID otherId,SecretKey secretKey,String hostName,int port){
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        String id = "voip_notification_channel_id";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            //用户可见的通道名称
+            String channelName = "VoIP Foreground Service Notification";
+            //通道的重要程度
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel notificationChannel = new NotificationChannel(id, channelName, importance);
+            notificationChannel.setDescription("Channel description");
+            //LED灯
+            notificationChannel.enableLights(true);
+            notificationChannel.setLightColor(Color.RED);
+            //震动
+            notificationChannel.setVibrationPattern(new long[]{0, 1000, 500, 1000});
+            notificationChannel.enableVibration(true);
+            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(notificationChannel);
+            }
+        }
+        startForeground(1,
+        new NotificationCompat.Builder(this,id)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Voice Communication")
+                .setContentText("Talking")
+                .setWhen(System.currentTimeMillis()).build());
+    }
+
+    @Override
+    public void onDestroy() {
+        stopForeground(true);
+        super.onDestroy();
+    }
+
+    public void init(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port){
         this.ourId = ourId;
         this.otherId = otherId;
         this.secretKey = secretKey;
@@ -66,7 +110,6 @@ public class VoIPService extends Service {
             e.printStackTrace();
             exit(0);
         }
-
     }
     public void startTalking(){
         AudioCodec.audio_codec_init(20);
@@ -94,30 +137,30 @@ public class VoIPService extends Service {
 
         AudioTrack audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
         .setSampleRate(SAMPLE_RATE)
-        .setChannelMask(CHANNEL).build())
+        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build())
         .setBufferSizeInBytes(recordBufSize)
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()).build();
-        tunnel.setRecvListener(new ClientTunnel.RecvListener() {
-            @Override
-            public void onRecv(ActiveDatagramTunnel.Incoming msg) {
-                if(!msg.src.equals(otherId))    return;
-                Request req;
-                try {
-                    req = parse(msg.data);
-                } catch (Crypto.DecryptException e) {
-                    return;
-                }
-                switch (req.ctrl){
-                    case TALK_PACK:
-                        byte[] sample = new byte[recordBufSize];
-                        int len = AudioCodec.audio_decode(req.data,0,req.data.length,sample,0);
-                        if(len<=0)  return;
-                        audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
-                        break;
-                }
+        audioTrack.setVolume(1.0f);
+        audioTrack.play();
+        tunnel.setRecvListener(msg -> {
+            if(!msg.src.equals(otherId))    return;
+            Request req;
+            try {
+                req = parse(msg.data);
+            } catch (Crypto.DecryptException e) {
+                return;
+            }
+            switch (req.ctrl){
+                case TALK_PACK:
+                    byte[] sample = new byte[recordBufSize];
+                    int len = AudioCodec.audio_decode(req.data,0,req.data.length,sample,0);
+                    if(len<=0)  return;
+                    audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
+                    break;
             }
         });
     }
@@ -127,28 +170,28 @@ public class VoIPService extends Service {
         cipherEncrypt.init(Cipher.ENCRYPT_MODE, secretKey);
         buf.writeBytes(cipherEncrypt.getIV());
         buf.writeBytes(cipherEncrypt.doFinal(data));
-        tunnel.send(buf.array(), otherId);
+        tunnel.send(Network.readAllBytes(buf), otherId);
     } catch (BadPaddingException | IllegalBlockSizeException | InvalidKeyException e) {
         e.printStackTrace();
         exit(0);
     }
     }
     public Request parse(byte[] pack) throws IndexOutOfBoundsException, Crypto.DecryptException {
-        if(pack.length<=4+12)  throw new IndexOutOfBoundsException();
+        if(pack.length<=4+16)  throw new IndexOutOfBoundsException();
         Request req = new Request();
         ByteBuf buf = Unpooled.copiedBuffer(pack);
         req.ctrl = Ctrl.values()[buf.readInt()];
         byte[] cipher = new byte[pack.length-4];
         buf.readBytes(cipher);
         try {
-            cipherDecrypt.init(Cipher.DECRYPT_MODE,secretKey,new IvParameterSpec(Arrays.copyOfRange(cipher,4,4+12)));
+            cipherDecrypt.init(Cipher.DECRYPT_MODE,secretKey,new IvParameterSpec(Arrays.copyOf(cipher,16)));
         } catch (InvalidAlgorithmParameterException | InvalidKeyException e) {
             e.printStackTrace();
             exit(0);
             return null;
         }
         try {
-            req.data = cipherDecrypt.doFinal(cipher,4+12,pack.length-4-12);
+            req.data = cipherDecrypt.doFinal(cipher,16,cipher.length-16);
         } catch (BadPaddingException | IllegalBlockSizeException e) {
             throw new Crypto.DecryptException();
         }
@@ -162,8 +205,9 @@ public class VoIPService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        return new Binder();
+        return new VoIPBinder();
     }
+
     private static class Request{
         Ctrl ctrl;
         byte[] data;

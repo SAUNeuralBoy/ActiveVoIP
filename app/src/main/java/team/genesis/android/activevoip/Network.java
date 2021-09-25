@@ -10,6 +10,11 @@ public class Network {
         buf.readBytes(bytes);
         return bytes;
     }
+    public static byte[] readAllBytes(ByteBuf buf){
+        byte[] bytes = new byte[buf.readableBytes()];
+        buf.readBytes(bytes);
+        return bytes;
+    }
     public static void writeBytes(ByteBuf buf,byte[] bytes){
         buf.writeInt(bytes.length);
         buf.writeBytes(bytes);

@@ -1,9 +1,16 @@
 package team.genesis.android.activevoip.ui.talking;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
@@ -11,6 +18,7 @@ import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import android.os.Handler;
+import android.os.IBinder;
 import android.security.keystore.KeyProperties;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -28,6 +36,7 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.Permission;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.SignatureException;
@@ -40,6 +49,7 @@ import java.util.Collections;
 import java.util.List;
 
 import javax.crypto.KeyAgreement;
+import javax.crypto.spec.SecretKeySpec;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -48,10 +58,12 @@ import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.Network;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.UI;
+import team.genesis.android.activevoip.VoIPService;
 import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.data.UUID;
 
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static java.lang.System.exit;
 
 
@@ -88,6 +100,21 @@ public class TalkingFragment extends Fragment {
                 case TALKING:
                     textStatus.setText(Crypto.bytesToHex(derivedKey, ":"));
                     root.findViewById(R.id.layout_incoming_action).setVisibility(View.GONE);
+                    activity.bindService(new Intent(activity, VoIPService.class), new ServiceConnection() {
+                        @Override
+                        public void onServiceConnected(ComponentName name, IBinder service) {
+                            VoIPService voip = ((VoIPService.VoIPBinder)service).getService();
+                            voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort());
+                            if(ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)!= PERMISSION_GRANTED)
+                                ActivityCompat.requestPermissions(activity,new String[]{Manifest.permission.RECORD_AUDIO},MainActivity.REQ_CODE_PERMISSION);
+                            voip.startTalking();
+                        }
+
+                        @Override
+                        public void onServiceDisconnected(ComponentName name) {
+
+                        }
+                    },Context.BIND_AUTO_CREATE);
                     break;
                 case REJECTED: {
                     UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
