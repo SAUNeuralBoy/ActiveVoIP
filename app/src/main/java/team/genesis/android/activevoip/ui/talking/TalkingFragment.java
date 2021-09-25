@@ -139,7 +139,7 @@ public class TalkingFragment extends Fragment {
                         otherId = new UUID(Crypto.md5(viewModel.getOtherPk()));
                         ByteBuf ack = Unpooled.buffer();
                         ack.writeInt(Ctrl.CALL_ACK.ordinal());
-                        activity.write(ack.array(), viewModel.getContact().uuid);
+                        activity.write(Network.readAllBytes(ack), viewModel.getContact().uuid);
                         viewModel.setStatus(TalkingViewModel.Status.TALKING);
                         return;
                     } catch (NoSuchAlgorithmException e) {
@@ -179,7 +179,7 @@ public class TalkingFragment extends Fragment {
                         @Override
                         public void run() {
                             if (viewModel.getStatus()!= TalkingViewModel.Status.CALLING) return;
-                            activity.write(buf.array(), contact.uuid);
+                            activity.write(Network.readAllBytes(buf), contact.uuid);
                             uiHandler.postDelayed(this, 1000);
                         }
                     };
@@ -219,7 +219,7 @@ public class TalkingFragment extends Fragment {
         root.findViewById(R.id.button_reject_call).setOnClickListener(v -> {
             ByteBuf buf = Unpooled.buffer();
             buf.writeInt(Ctrl.CALL_REJECT.ordinal());
-            activity.write(buf.array(),contact.uuid);
+            activity.write(Network.readAllBytes(buf),contact.uuid);
             navController.navigate(R.id.nav_home);
         });
         root.findViewById(R.id.button_accept_call).setOnClickListener(v -> {try {
@@ -262,7 +262,7 @@ public class TalkingFragment extends Fragment {
                         navController.navigate(R.id.nav_home);
                     }
                 }, 5000);
-                activity.write(buf.array(),contact.uuid);
+                activity.write(Network.readAllBytes(buf),contact.uuid);
             } else {
                 UI.makeSnackBar(getView(), getString(R.string.pair_failed));
                 navController.navigate(R.id.nav_home);

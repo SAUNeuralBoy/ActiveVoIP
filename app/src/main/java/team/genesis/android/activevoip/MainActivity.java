@@ -198,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
                     repBuf.writeInt(Ctrl.PAIR_RESPONSE.ordinal());
                     Network.writeBytes(repBuf,contact.ourPk);
                     Network.writeBytes(repBuf,contact.otherPk);
-                    write(repBuf.array(),msg.src);
+                    write(Network.readAllBytes(repBuf),msg.src);
 
                     contact.status = Contact.Status.PAIR_RCVD;
                     dao.insertContact(new ContactEntity(contact));
@@ -223,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     repBuf.writeInt(Ctrl.PAIR_ACK.ordinal());
-                    write(repBuf.array(),msg.src);
+                    write(Network.readAllBytes(repBuf),msg.src);
                     contact.status = Contact.Status.CONFIRM_WAIT;
                     dao.insertContact(new ContactEntity(contact));
                     break;}
@@ -399,7 +399,7 @@ public class MainActivity extends AppCompatActivity {
         KeyPair kp = kpg.generateKeyPair();
         contact.ourPk = kp.getPublic().getEncoded();
         Network.writeBytes(buf,contact.ourPk);
-        write(buf.array(),contact.uuid);
+        write(Network.readAllBytes(buf),contact.uuid);
         contact.status = Contact.Status.PAIR_SENT;
         dao.insertContact(new ContactEntity(contact));
     }
