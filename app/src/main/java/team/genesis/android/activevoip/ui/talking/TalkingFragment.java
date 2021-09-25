@@ -105,8 +105,6 @@ public class TalkingFragment extends Fragment {
                         public void onServiceConnected(ComponentName name, IBinder service) {
                             VoIPService voip = ((VoIPService.VoIPBinder)service).getService();
                             voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort());
-                            if(ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)!= PERMISSION_GRANTED)
-                                ActivityCompat.requestPermissions(activity,new String[]{Manifest.permission.RECORD_AUDIO},MainActivity.REQ_CODE_PERMISSION);
                             voip.startTalking();
                         }
 

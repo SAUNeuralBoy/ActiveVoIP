@@ -1,6 +1,8 @@
 package team.genesis.android.activevoip;
 
+import android.Manifest;
 import android.app.AlertDialog;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,6 +19,8 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -64,6 +68,7 @@ import team.genesis.tunnels.ActiveDatagramTunnel;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
 import team.genesis.tunnels.active.datagram.udp.UDPProbe;
 
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static java.lang.System.exit;
 
 public class MainActivity extends AppCompatActivity {
@@ -420,7 +425,14 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if(requestCode==REQ_CODE_PERMISSION){
-            exit(0);
+            if(grantResults[0] != PERMISSION_GRANTED) exit(0);
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)!= PERMISSION_GRANTED)
+            ActivityCompat.requestPermissions(this,new String[]{Manifest.permission.RECORD_AUDIO},MainActivity.REQ_CODE_PERMISSION);
     }
 }
