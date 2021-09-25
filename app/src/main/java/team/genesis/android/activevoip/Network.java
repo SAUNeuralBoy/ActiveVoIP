@@ -13,6 +13,7 @@ public class Network {
     public static byte[] readAllBytes(ByteBuf buf){
         byte[] bytes = new byte[buf.readableBytes()];
         buf.readBytes(bytes);
+        buf.resetReaderIndex();
         return bytes;
     }
     public static void writeBytes(ByteBuf buf,byte[] bytes){
