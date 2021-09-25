@@ -32,7 +32,7 @@ import static java.lang.System.exit;
 
 public class VoIPService extends Service {
     public static final int AUDIO_SOURCE = MediaRecorder.AudioSource.MIC;
-    public static final int SAMPLE_RATE = 44100;
+    public static final int SAMPLE_RATE = 8000;
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
     public static final int RECORD_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
@@ -74,10 +74,11 @@ public class VoIPService extends Service {
             @Override
             public void run() {
                 if(!isRecording)    return;
-                if(audioRecord.read(buf,0,recordBufSize)==AudioRecord.SUCCESS){
+                recordHandler.postDelayed(this,20);
+                int len = audioRecord.read(buf,0,recordBufSize);
+                if(len>0){
 
                 }
-                recordHandler.post(this);
             }
         };
         recordHandler.post(r);
