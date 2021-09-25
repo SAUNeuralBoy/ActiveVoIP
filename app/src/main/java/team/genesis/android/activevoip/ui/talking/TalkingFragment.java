@@ -259,7 +259,7 @@ public class TalkingFragment extends Fragment {
                         UI.makeSnackBar(root, getString(R.string.call_interrupted));
                         navController.navigate(R.id.nav_home);
                     }
-                }, 5000);
+                }, 2500);
                 activity.write(Network.readAllBytes(buf),contact.uuid);
             } else {
                 UI.makeSnackBar(getView(), getString(R.string.pair_failed));
