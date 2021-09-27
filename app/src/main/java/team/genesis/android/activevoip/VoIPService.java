@@ -24,6 +24,9 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.BadPaddingException;
@@ -43,6 +46,7 @@ import team.genesis.android.activevoip.voip.AudioCodec;
 import team.genesis.data.UUID;
 import team.genesis.tunnels.ActiveDatagramTunnel;
 
+import static java.lang.System.currentTimeMillis;
 import static java.lang.System.exit;
 
 public class VoIPService extends Service {
@@ -60,6 +64,7 @@ public class VoIPService extends Service {
     private TalkingFragment fragment;
     private AudioRecord audioRecord;
     private Handler recordHandler;
+    private Handler playHandler;
 
     private AudioTrack audioTrack;
     public VoIPService(){
@@ -124,8 +129,8 @@ public class VoIPService extends Service {
         AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
-        audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize*4);
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*4;
+        audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
         byte[] queued = new byte[recordBufSize*8];
         AtomicInteger pos = new AtomicInteger(0);
@@ -159,6 +164,7 @@ public class VoIPService extends Service {
         };
         recordHandler.post(encode);
 
+        List<byte[]> incoming = Collections.synchronizedList(new LinkedList<byte[]>());
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
@@ -181,15 +187,30 @@ public class VoIPService extends Service {
             if (req==null||req.data==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
-                    byte[] sample = new byte[Integer.max(recordBufSize,2048)];
-                    int len = AudioCodec.audio_decode(req.data,0,req.data.length,sample,0);
-                    if(len<=0)  return;
-                    audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
+                    incoming.add(req.data);
                     break;
                 case TALK_CUT:
                     fragment.onCut();
             }
         });
+        playHandler = UI.getCycledHandler("voip_play");
+        Runnable play = new Runnable() {
+            @Override
+            public void run() {
+                if(!isRecording)    return;
+                playHandler.postDelayed(this,20);
+                if(incoming.size()>1){
+                    byte[] data = incoming.remove(0);
+                    byte[] sample = new byte[Integer.max(recordBufSize,2048)];
+                    int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
+                    if(len<=0)  return;
+                    audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
+                    if(incoming.size()>100)  incoming.clear();
+                }
+            }
+        };
+
+        playHandler.post(play);
     }
     private void write(Ctrl ctrl, byte[] data){try {
         ByteBuf buf = Unpooled.buffer();
@@ -249,6 +270,7 @@ public class VoIPService extends Service {
         audioRecord.stop();
         audioRecord.release();
         tunnel.release();
+        playHandler.getLooper().quit();
         audioTrack.stop();
         audioTrack.release();
         stopSelf();
