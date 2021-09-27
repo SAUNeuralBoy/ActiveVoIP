@@ -36,6 +36,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
+import team.genesis.android.activevoip.ui.talking.TalkingFragment;
+import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.android.activevoip.voip.AudioCodec;
 import team.genesis.data.UUID;
 import team.genesis.tunnels.ActiveDatagramTunnel;
@@ -54,6 +56,10 @@ public class VoIPService extends Service {
     private ClientTunnel tunnel;
     private Cipher cipherEncrypt,cipherDecrypt;
     private boolean isRecording;
+    private TalkingFragment fragment;
+    private AudioRecord audioRecord;
+    private Handler recordHandler;
+    private AudioTrack audioTrack;
     public VoIPService(){
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
@@ -100,10 +106,11 @@ public class VoIPService extends Service {
         super.onDestroy();
     }
 
-    public void init(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port){
+    public void init(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, TalkingFragment fragment){
         this.ourId = ourId;
         this.otherId = otherId;
         this.secretKey = secretKey;
+        this.fragment = fragment;
         try {
             tunnel = new ClientTunnel("voip",hostName,port,ourId);
         } catch (SocketException e) {
@@ -116,11 +123,11 @@ public class VoIPService extends Service {
 
 
         int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*4;
-        AudioRecord audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
+        audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
         isRecording = true;
         audioRecord.startRecording();
-        Handler recordHandler = UI.getCycledHandler("voip_record");
+        recordHandler = UI.getCycledHandler("voip_record");
         Runnable r = new Runnable() {
             @Override
             public void run() {
@@ -135,7 +142,7 @@ public class VoIPService extends Service {
         };
         recordHandler.post(r);
 
-        AudioTrack audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
+        audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
@@ -154,6 +161,7 @@ public class VoIPService extends Service {
             } catch (Crypto.DecryptException e) {
                 return;
             }
+            if (req==null||req.data==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
                     byte[] sample = new byte[recordBufSize];
@@ -161,6 +169,8 @@ public class VoIPService extends Service {
                     if(len<=0)  return;
                     audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
                     break;
+                case TALK_CUT:
+                    fragment.onCut();
             }
         });
     }
@@ -211,5 +221,19 @@ public class VoIPService extends Service {
     private static class Request{
         Ctrl ctrl;
         byte[] data;
+    }
+
+    public void cut(){
+        ByteBuf buf = Unpooled.buffer();
+        buf.writeInt(Ctrl.TALK_CUT.ordinal());
+        tunnel.send(Network.readAllBytes(buf),otherId);
+        isRecording = false;
+        recordHandler.getLooper().quit();
+        audioRecord.stop();
+        audioRecord.release();
+        tunnel.release();
+        audioTrack.stop();
+        audioTrack.release();
+        stopSelf();
     }
 }

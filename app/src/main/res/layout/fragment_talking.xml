@@ -19,6 +19,22 @@
             android:gravity="center" />
 
         <LinearLayout
+            android:id="@+id/layout_talking"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/button_cut"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:src="@android:drawable/ic_menu_call"
+                app:tint="#FF0000" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/layout_incoming_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -117,4 +117,9 @@ public class ClientTunnel extends UDPActiveDatagramTunnel {
             mPort = port;
         }
     }
+    public void release(){
+        writeHandler.getLooper().quitSafely();
+        recvHandler.getLooper().quit();
+        dnsHandler.getLooper().quit();
+    }
 }

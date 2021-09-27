@@ -79,6 +79,9 @@ public class TalkingFragment extends Fragment {
     private UUID otherId;
     private KeyPair kp;
     private Observer<TalkingViewModel.Status> statusObserver;
+    private VoIPService voip;
+    private ServiceConnection conn;
+    private ImageButton buttonCut;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -98,21 +101,23 @@ public class TalkingFragment extends Fragment {
         statusObserver = status -> {
             switch (status) {
                 case TALKING:
-                    textStatus.setText(Crypto.bytesToHex(derivedKey, ":"));
+                    textStatus.setText(R.string.talking);
                     root.findViewById(R.id.layout_incoming_action).setVisibility(View.GONE);
-                    activity.bindService(new Intent(activity, VoIPService.class), new ServiceConnection() {
+                    root.findViewById(R.id.layout_talking).setVisibility(View.VISIBLE);
+                    conn = new ServiceConnection() {
                         @Override
                         public void onServiceConnected(ComponentName name, IBinder service) {
-                            VoIPService voip = ((VoIPService.VoIPBinder)service).getService();
-                            voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort());
+                            voip = ((VoIPService.VoIPBinder)service).getService();
+                            voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort(),TalkingFragment.this);
                             voip.startTalking();
                         }
 
                         @Override
                         public void onServiceDisconnected(ComponentName name) {
-
+                            voip.cut();
                         }
-                    },Context.BIND_AUTO_CREATE);
+                    };
+                    activity.bindService(new Intent(activity, VoIPService.class), conn,Context.BIND_AUTO_CREATE);
                     break;
                 case REJECTED: {
                     UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
@@ -273,6 +278,8 @@ public class TalkingFragment extends Fragment {
             exit(0);
         }
         });
+        buttonCut = root.findViewById(R.id.button_cut);
+        buttonCut.setOnClickListener(v -> onCut());
         return root;
     }
     @Override
@@ -301,5 +308,10 @@ public class TalkingFragment extends Fragment {
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
+    }
+    public void onCut(){
+        activity.unbindService(conn);
+        buttonCut.setClickable(false);
+        Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
     }
 }

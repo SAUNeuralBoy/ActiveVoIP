@@ -53,4 +53,5 @@
     <string name="incoming_call_with_format">Incoming call from %s(%s)with fingerprint %s</string>
     <string name="call_refused">Call refused by your contact</string>
     <string name="call_interrupted">The call was interrupted unexpectedly</string>
+    <string name="talking">Talking…</string>
 </resources>
