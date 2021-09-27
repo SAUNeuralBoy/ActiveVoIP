@@ -24,6 +24,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -59,6 +60,7 @@ public class VoIPService extends Service {
     private TalkingFragment fragment;
     private AudioRecord audioRecord;
     private Handler recordHandler;
+
     private AudioTrack audioTrack;
     public VoIPService(){
         try {
@@ -122,36 +124,51 @@ public class VoIPService extends Service {
         AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*4;
-        audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
+        audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize*4);
         byte[] buf = new byte[recordBufSize];
+        byte[] queued = new byte[recordBufSize*8];
+        AtomicInteger pos = new AtomicInteger(0);
         isRecording = true;
         audioRecord.startRecording();
         recordHandler = UI.getCycledHandler("voip_record");
-        Runnable r = new Runnable() {
+        Runnable record = new Runnable() {
+            @Override
+            public void run() {
+                if(!isRecording)    return;
+                int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_BLOCKING);
+                if(len>0&&len<queued.length-pos.get()){
+                    System.arraycopy(buf,0,queued,pos.get(),len);
+                    pos.set(pos.get()+len);
+                }
+                recordHandler.post(this);
+            }
+        };
+        recordHandler.post(record);
+        Runnable encode = new Runnable() {
             @Override
             public void run() {
                 if(!isRecording)    return;
                 recordHandler.postDelayed(this,20);
-                int len = audioRecord.read(buf,0,recordBufSize);
-                if(len>0){
-                    byte[] encoded = new byte[len];
-                    write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
+                if(pos.get()>0){
+                    byte[] encoded = new byte[2048];
+                    write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(queued,0,pos.get(),encoded,0)));
+                    pos.set(0);
                 }
             }
         };
-        recordHandler.post(r);
+        recordHandler.post(encode);
 
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
-        .setBufferSizeInBytes(recordBufSize)
+        .setBufferSizeInBytes(Integer.max(recordBufSize,2048))
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()).build();
-        audioTrack.setVolume(1.0f);
+        audioTrack.setVolume(AudioTrack.getMaxVolume());
         audioTrack.play();
         tunnel.setRecvListener(msg -> {
             if(!msg.src.equals(otherId))    return;
@@ -164,7 +181,7 @@ public class VoIPService extends Service {
             if (req==null||req.data==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
-                    byte[] sample = new byte[recordBufSize];
+                    byte[] sample = new byte[Integer.max(recordBufSize,2048)];
                     int len = AudioCodec.audio_decode(req.data,0,req.data.length,sample,0);
                     if(len<=0)  return;
                     audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
