@@ -64,7 +64,6 @@ public class VoIPService extends Service {
     private TalkingFragment fragment;
     private AudioRecord audioRecord;
     private Handler recordHandler;
-    private Handler playHandler;
 
     private AudioTrack audioTrack;
     public VoIPService(){
@@ -136,33 +135,32 @@ public class VoIPService extends Service {
         AtomicInteger pos = new AtomicInteger(0);
         isRecording = true;
         audioRecord.startRecording();
+        Handler uiHandler = new Handler();
         recordHandler = UI.getCycledHandler("voip_record");
         Runnable record = new Runnable() {
             @Override
             public void run() {
                 if(!isRecording)    return;
                 int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_BLOCKING);
-                if(len>0&&len<queued.length-pos.get()){
-                    System.arraycopy(buf,0,queued,pos.get(),len);
-                    pos.set(pos.get()+len);
-                }
+                uiHandler.post(()->{
+                    if(len>0&&len<queued.length-pos.get()){
+                        System.arraycopy(buf,0,queued,pos.get(),len);
+                        pos.set(pos.get()+len);
+                    }
+                });
                 recordHandler.post(this);
             }
         };
         recordHandler.post(record);
-        Runnable encode = new Runnable() {
-            @Override
-            public void run() {
-                if(!isRecording)    return;
-                recordHandler.postDelayed(this,20);
-                if(pos.get()>0){
-                    byte[] encoded = new byte[2048];
-                    write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(queued,0,pos.get(),encoded,0)));
-                    pos.set(0);
-                }
+
+        Runnable encode = () -> {
+            if(!isRecording)    return;
+            if(pos.get()>0){
+                byte[] encoded = new byte[2048];
+                write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(queued,0,pos.get(),encoded,0)));
+                pos.set(0);
             }
         };
-        recordHandler.post(encode);
 
         List<byte[]> incoming = Collections.synchronizedList(new LinkedList<byte[]>());
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
@@ -193,24 +191,30 @@ public class VoIPService extends Service {
                     fragment.onCut();
             }
         });
-        playHandler = UI.getCycledHandler("voip_play");
-        Runnable play = new Runnable() {
-            @Override
-            public void run() {
-                if(!isRecording)    return;
-                playHandler.postDelayed(this,20);
-                if(incoming.size()>1){
-                    byte[] data = incoming.remove(0);
-                    byte[] sample = new byte[Integer.max(recordBufSize,2048)];
-                    int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
-                    if(len<=0)  return;
-                    audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
-                    if(incoming.size()>100)  incoming.clear();
-                }
+        Runnable play = () -> {
+            if(!isRecording)    return;
+            if(incoming.size()>1){
+                byte[] data = incoming.remove(0);
+                byte[] sample = new byte[Integer.max(recordBufSize,2048)];
+                int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
+                if(len<=0)  return;
+                audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
+                if(incoming.size()>100)  incoming.clear();
             }
         };
 
-        playHandler.post(play);
+        new Thread(() -> {
+            while (isRecording) {
+                uiHandler.post(encode);
+                uiHandler.post(play);
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    return;
+                }
+            }
+        }).start();
     }
     private void write(Ctrl ctrl, byte[] data){try {
         ByteBuf buf = Unpooled.buffer();
@@ -270,7 +274,6 @@ public class VoIPService extends Service {
         audioRecord.stop();
         audioRecord.release();
         tunnel.release();
-        playHandler.getLooper().quit();
         audioTrack.stop();
         audioTrack.release();
         stopSelf();
