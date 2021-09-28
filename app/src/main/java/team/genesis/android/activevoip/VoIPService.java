@@ -50,7 +50,7 @@ import static java.lang.System.currentTimeMillis;
 import static java.lang.System.exit;
 
 public class VoIPService extends Service {
-    public static final int AUDIO_SOURCE = MediaRecorder.AudioSource.MIC;
+    public static final int AUDIO_SOURCE = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
     public static final int SAMPLE_RATE = 8000;
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
     public static final int RECORD_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
