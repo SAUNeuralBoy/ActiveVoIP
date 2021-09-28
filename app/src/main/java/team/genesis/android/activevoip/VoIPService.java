@@ -64,6 +64,7 @@ public class VoIPService extends Service {
     private TalkingFragment fragment;
     private AudioRecord audioRecord;
     private Handler recordHandler;
+    private Handler asyncHandler;
 
     private AudioTrack audioTrack;
     public VoIPService(){
@@ -135,14 +136,14 @@ public class VoIPService extends Service {
         AtomicInteger pos = new AtomicInteger(0);
         isRecording = true;
         audioRecord.startRecording();
-        Handler uiHandler = new Handler();
+        asyncHandler = UI.getCycledHandler("voip_async");
         recordHandler = UI.getCycledHandler("voip_record");
         Runnable record = new Runnable() {
             @Override
             public void run() {
                 if(!isRecording)    return;
                 int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_BLOCKING);
-                uiHandler.post(()->{
+                asyncHandler.post(()->{
                     if(len>0&&len<queued.length-pos.get()){
                         System.arraycopy(buf,0,queued,pos.get(),len);
                         pos.set(pos.get()+len);
@@ -162,7 +163,7 @@ public class VoIPService extends Service {
             }
         };
 
-        List<byte[]> incoming = Collections.synchronizedList(new LinkedList<byte[]>());
+        List<byte[]> incoming = Collections.synchronizedList(new LinkedList<>());
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
@@ -205,8 +206,8 @@ public class VoIPService extends Service {
 
         new Thread(() -> {
             while (isRecording) {
-                uiHandler.post(encode);
-                uiHandler.post(play);
+                asyncHandler.post(encode);
+                asyncHandler.post(play);
                 try {
                     Thread.sleep(20);
                 } catch (InterruptedException e) {
@@ -271,6 +272,7 @@ public class VoIPService extends Service {
         tunnel.send(Network.readAllBytes(buf),otherId);
         isRecording = false;
         recordHandler.getLooper().quit();
+        asyncHandler.getLooper().quit();
         audioRecord.stop();
         audioRecord.release();
         tunnel.release();
