@@ -129,10 +129,11 @@ public class VoIPService extends Service {
         AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*4;
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
         audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
-        byte[] queued = new byte[recordBufSize*8];
+        byte[] queued = new byte[recordBufSize*32];
+
         AtomicInteger pos = new AtomicInteger(0);
         isRecording = true;
         audioRecord.startRecording();
@@ -168,7 +169,7 @@ public class VoIPService extends Service {
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
-        .setBufferSizeInBytes(Integer.max(recordBufSize,2048))
+        .setBufferSizeInBytes(queued.length)
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -196,7 +197,7 @@ public class VoIPService extends Service {
             if(!isRecording)    return;
             if(incoming.size()>1){
                 byte[] data = incoming.remove(0);
-                byte[] sample = new byte[Integer.max(recordBufSize,2048)];
+                byte[] sample = new byte[queued.length];
                 int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
                 if(len<=0)  return;
                 audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
