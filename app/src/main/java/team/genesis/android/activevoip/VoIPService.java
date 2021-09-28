@@ -63,7 +63,6 @@ public class VoIPService extends Service {
     private boolean isRecording;
     private TalkingFragment fragment;
     private AudioRecord audioRecord;
-    private Handler recordHandler;
     private Handler asyncHandler;
 
     private AudioTrack audioTrack;
@@ -129,39 +128,20 @@ public class VoIPService extends Service {
         AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*32;
         audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
-        byte[] queued = new byte[recordBufSize*32];
 
-        AtomicInteger pos = new AtomicInteger(0);
         isRecording = true;
         audioRecord.startRecording();
         asyncHandler = UI.getCycledHandler("voip_async");
-        recordHandler = UI.getCycledHandler("voip_record");
-        Runnable record = new Runnable() {
-            @Override
-            public void run() {
-                if(!isRecording)    return;
-                int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_BLOCKING);
-                asyncHandler.post(()->{
-                    if(len>0&&len<queued.length-pos.get()){
-                        System.arraycopy(buf,0,queued,pos.get(),len);
-                        pos.set(pos.get()+len);
-                    }
-                });
-                recordHandler.post(this);
-            }
-        };
-        recordHandler.post(record);
 
         Runnable encode = () -> {
             if(!isRecording)    return;
-            if(pos.get()>0){
-                byte[] encoded = new byte[2048];
-                write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(queued,0,pos.get(),encoded,0)));
-                pos.set(0);
-            }
+            int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_NON_BLOCKING);
+            if(len<0)   return;
+            byte[] encoded = new byte[2048];
+            write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
         };
 
         List<byte[]> incoming = Collections.synchronizedList(new LinkedList<>());
@@ -169,7 +149,7 @@ public class VoIPService extends Service {
         .setSampleRate(SAMPLE_RATE)
         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
-        .setBufferSizeInBytes(queued.length)
+        .setBufferSizeInBytes(recordBufSize)
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -197,7 +177,7 @@ public class VoIPService extends Service {
             if(!isRecording)    return;
             if(incoming.size()>1){
                 byte[] data = incoming.remove(0);
-                byte[] sample = new byte[queued.length];
+                byte[] sample = new byte[recordBufSize];
                 int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
                 if(len<=0)  return;
                 audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
@@ -272,7 +252,6 @@ public class VoIPService extends Service {
         buf.writeInt(Ctrl.TALK_CUT.ordinal());
         tunnel.send(Network.readAllBytes(buf),otherId);
         isRecording = false;
-        recordHandler.getLooper().quit();
         asyncHandler.getLooper().quit();
         audioRecord.stop();
         audioRecord.release();
