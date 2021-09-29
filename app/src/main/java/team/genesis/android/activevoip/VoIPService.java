@@ -183,7 +183,7 @@ public class VoIPService extends Service {
                 int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
                 if(len<=0)  return;
                 audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
-                if(incoming.size()>100)  incoming.clear();
+                if(incoming.size()>25)  incoming.clear();
             }
         };
         AudioManager audioManager = (AudioManager) VoIPService.this.getSystemService(Context.AUDIO_SERVICE);
