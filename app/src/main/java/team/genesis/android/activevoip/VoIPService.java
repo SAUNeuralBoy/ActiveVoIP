@@ -191,7 +191,7 @@ public class VoIPService extends Service {
             @Override
             public void run() {
                 if(!isRecording)    return;
-                AudioDeviceInfo device = null;
+                AudioDeviceInfo device = null,earPhone=null,stereo=null;
                 for(AudioDeviceInfo i:audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)){
                     if(i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES){
                         device = i;
@@ -199,8 +199,13 @@ public class VoIPService extends Service {
                     }
                     if(i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP||i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
                         device = i;
+                    if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+                        earPhone = i;
+                    if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+                        stereo = i;
                 }
                 if(device!=null)    audioTrack.setPreferredDevice(device);
+                else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
                 uiHandler.postDelayed(this,200);
             }
         };
@@ -280,5 +285,8 @@ public class VoIPService extends Service {
         audioTrack.stop();
         audioTrack.release();
         stopSelf();
+    }
+    public void setOutDevice(AudioDeviceInfo device){
+        audioTrack.setPreferredDevice(device);
     }
 }

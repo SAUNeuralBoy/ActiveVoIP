@@ -32,6 +32,15 @@
                 android:layout_weight="1"
                 android:src="@android:drawable/ic_menu_call"
                 app:tint="#FF0000" />
+
+            <ImageButton
+                android:id="@+id/button_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:src="@android:drawable/ic_lock_silent_mode_off"
+                app:tint="#000000"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout

@@ -1,16 +1,14 @@
 package team.genesis.android.activevoip.ui.talking;
 
-import android.Manifest;
-import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.ColorStateList;
+import android.media.AudioDeviceInfo;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
@@ -36,7 +34,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.Permission;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.SignatureException;
@@ -63,8 +60,8 @@ import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.data.UUID;
 
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static java.lang.System.exit;
+import static java.lang.System.out;
 
 
 public class TalkingFragment extends Fragment {
@@ -118,6 +115,7 @@ public class TalkingFragment extends Fragment {
                         }
                     };
                     activity.bindService(new Intent(activity, VoIPService.class), conn,Context.BIND_AUTO_CREATE);
+                    mSelectable = false;
                     break;
                 case REJECTED: {
                     UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
@@ -280,6 +278,18 @@ public class TalkingFragment extends Fragment {
         });
         buttonCut = root.findViewById(R.id.button_cut);
         buttonCut.setOnClickListener(v -> onCut());
+        root.findViewById(R.id.button_switch).setOnClickListener(v -> {
+            if(outState==OutState.EARPHONE){
+                ((ImageButton)v).setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.fine_color)));
+                outState=OutState.STEREO;
+                voip.setOutDevice(mStereo);
+            }
+            else{
+                ((ImageButton)v).setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.black)));
+                outState=OutState.EARPHONE;
+                voip.setOutDevice(mEarphone);
+            }
+        });
         return root;
     }
     @Override
@@ -313,5 +323,21 @@ public class TalkingFragment extends Fragment {
         activity.unbindService(conn);
         buttonCut.setClickable(false);
         Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
+    }
+    private AudioDeviceInfo mEarphone;
+    private AudioDeviceInfo mStereo;
+    private boolean mSelectable;
+    private enum OutState{
+        EARPHONE,STEREO
+    }
+    private OutState outState;
+    public void passDevice(AudioDeviceInfo earphone,AudioDeviceInfo stereo){
+        mEarphone = earphone;
+        mStereo = stereo;
+        if(!mSelectable){
+            outState = OutState.EARPHONE;
+            activity.findViewById(R.id.button_switch).setVisibility(View.VISIBLE);
+            mSelectable=true;
+        }
     }
 }
