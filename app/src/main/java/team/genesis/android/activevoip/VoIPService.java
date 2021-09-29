@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -135,6 +136,7 @@ public class VoIPService extends Service {
         isRecording = true;
         audioRecord.startRecording();
         asyncHandler = UI.getCycledHandler("voip_async");
+        Handler uiHandler = new Handler();
 
         Runnable encode = () -> {
             if(!isRecording)    return;
@@ -184,6 +186,25 @@ public class VoIPService extends Service {
                 if(incoming.size()>100)  incoming.clear();
             }
         };
+        AudioManager audioManager = (AudioManager) VoIPService.this.getSystemService(Context.AUDIO_SERVICE);
+        Runnable detect = new Runnable() {
+            @Override
+            public void run() {
+                if(!isRecording)    return;
+                AudioDeviceInfo device = null;
+                for(AudioDeviceInfo i:audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)){
+                    if(i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES){
+                        device = i;
+                        break;
+                    }
+                    if(i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP||i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+                        device = i;
+                }
+                if(device!=null)    audioTrack.setPreferredDevice(device);
+                uiHandler.postDelayed(this,200);
+            }
+        };
+        uiHandler.post(detect);
 
         new Thread(() -> {
             while (isRecording) {
