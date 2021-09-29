@@ -116,6 +116,7 @@ public class TalkingFragment extends Fragment {
                     };
                     activity.bindService(new Intent(activity, VoIPService.class), conn,Context.BIND_AUTO_CREATE);
                     mSelectable = false;
+                    outState = OutState.EARPHONE;
                     break;
                 case REJECTED: {
                     UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
@@ -335,9 +336,18 @@ public class TalkingFragment extends Fragment {
         mEarphone = earphone;
         mStereo = stereo;
         if(!mSelectable){
-            outState = OutState.EARPHONE;
             activity.findViewById(R.id.button_switch).setVisibility(View.VISIBLE);
             mSelectable=true;
+            if(outState==OutState.EARPHONE)
+                voip.setOutDevice(earphone);
+            else
+                voip.setOutDevice(mStereo);
+        }
+    }
+    public void disableSelect(){
+        if(mSelectable){
+            activity.findViewById(R.id.button_switch).setVisibility(View.GONE);
+            mSelectable = false;
         }
     }
 }

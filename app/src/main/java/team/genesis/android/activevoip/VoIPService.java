@@ -193,7 +193,7 @@ public class VoIPService extends Service {
                 if(!isRecording)    return;
                 AudioDeviceInfo device = null,earPhone=null,stereo=null;
                 for(AudioDeviceInfo i:audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)){
-                    if(i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES){
+                    if(i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES||i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADSET){
                         device = i;
                         break;
                     }
@@ -204,7 +204,10 @@ public class VoIPService extends Service {
                     if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
                         stereo = i;
                 }
-                if(device!=null)    audioTrack.setPreferredDevice(device);
+                if(device!=null) {
+                    audioTrack.setPreferredDevice(device);
+                    fragment.disableSelect();
+                }
                 else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
                 uiHandler.postDelayed(this,200);
             }
