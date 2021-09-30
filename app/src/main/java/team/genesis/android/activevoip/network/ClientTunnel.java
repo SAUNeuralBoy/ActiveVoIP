@@ -45,7 +45,8 @@ public class ClientTunnel extends UDPActiveDatagramTunnel {
             @Override
             public void run() {
                 try {
-                    mListener.onRecv(recv());
+                    Incoming msg = recv();
+                    mListener.onRecv(msg);
                 } catch (IOException e) {
                     recvHandler.postDelayed(this,1000);
                     return;
