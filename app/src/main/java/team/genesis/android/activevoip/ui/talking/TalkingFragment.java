@@ -79,6 +79,7 @@ public class TalkingFragment extends Fragment {
     private VoIPService voip;
     private ServiceConnection conn;
     private ImageButton buttonCut;
+    private ImageButton buttonSwitch;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -279,14 +280,15 @@ public class TalkingFragment extends Fragment {
         });
         buttonCut = root.findViewById(R.id.button_cut);
         buttonCut.setOnClickListener(v -> onCut());
-        root.findViewById(R.id.button_switch).setOnClickListener(v -> {
+        buttonSwitch = root.findViewById(R.id.button_switch);
+        buttonSwitch.setOnClickListener(v -> {
             if(outState==OutState.EARPHONE){
-                ((ImageButton)v).setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.fine_color)));
+                buttonSwitch.setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.fine_color)));
                 outState=OutState.STEREO;
                 voip.setOutDevice(mStereo);
             }
             else{
-                ((ImageButton)v).setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.black)));
+                buttonSwitch.setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.black)));
                 outState=OutState.EARPHONE;
                 voip.setOutDevice(mEarphone);
             }
@@ -336,7 +338,7 @@ public class TalkingFragment extends Fragment {
         mEarphone = earphone;
         mStereo = stereo;
         if(!mSelectable){
-            activity.findViewById(R.id.button_switch).setVisibility(View.VISIBLE);
+            buttonSwitch.setVisibility(View.VISIBLE);
             mSelectable=true;
             if(outState==OutState.EARPHONE)
                 voip.setOutDevice(earphone);
@@ -346,7 +348,7 @@ public class TalkingFragment extends Fragment {
     }
     public void disableSelect(){
         if(mSelectable){
-            activity.findViewById(R.id.button_switch).setVisibility(View.GONE);
+            buttonSwitch.setVisibility(View.GONE);
             mSelectable = false;
         }
     }
