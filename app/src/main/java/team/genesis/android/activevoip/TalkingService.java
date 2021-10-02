@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -48,7 +47,7 @@ import team.genesis.data.UUID;
 
 import static java.lang.System.exit;
 
-public class VoIPService extends Service {
+public class TalkingService extends Service {
     public static final int AUDIO_SOURCE = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
     public static final int SAMPLE_RATE = 8000;
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
@@ -65,7 +64,7 @@ public class VoIPService extends Service {
     private Handler asyncHandler;
 
     private AudioTrack audioTrack;
-    public VoIPService(){
+    public TalkingService(){
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding",cipherEncrypt.getProvider());
@@ -184,7 +183,7 @@ public class VoIPService extends Service {
                 if(incoming.size()>25)  incoming.clear();
             }
         };
-        AudioManager audioManager = (AudioManager) VoIPService.this.getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = (AudioManager) TalkingService.this.getSystemService(Context.AUDIO_SERVICE);
         final AudioDeviceInfo[] lastDevice = {null};
         Runnable detect = new Runnable() {
             @Override
@@ -267,8 +266,8 @@ public class VoIPService extends Service {
         return req;
     }
     public class VoIPBinder extends Binder{
-        public VoIPService getService(){
-            return VoIPService.this;
+        public TalkingService getService(){
+            return TalkingService.this;
         }
     }
 

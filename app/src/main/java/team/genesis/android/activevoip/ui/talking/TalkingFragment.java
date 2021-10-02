@@ -55,13 +55,12 @@ import team.genesis.android.activevoip.MainActivity;
 import team.genesis.android.activevoip.Network;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.UI;
-import team.genesis.android.activevoip.VoIPService;
+import team.genesis.android.activevoip.TalkingService;
 import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.data.UUID;
 
 import static java.lang.System.exit;
-import static java.lang.System.out;
 
 
 public class TalkingFragment extends Fragment {
@@ -76,7 +75,7 @@ public class TalkingFragment extends Fragment {
     private UUID otherId;
     private KeyPair kp;
     private Observer<TalkingViewModel.Status> statusObserver;
-    private VoIPService voip;
+    private TalkingService voip;
     private ServiceConnection conn;
     private ImageButton buttonCut;
     private ImageButton buttonSwitch;
@@ -105,7 +104,7 @@ public class TalkingFragment extends Fragment {
                     conn = new ServiceConnection() {
                         @Override
                         public void onServiceConnected(ComponentName name, IBinder service) {
-                            voip = ((VoIPService.VoIPBinder)service).getService();
+                            voip = ((TalkingService.VoIPBinder)service).getService();
                             voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort(),TalkingFragment.this);
                             voip.startTalking();
                         }
@@ -115,7 +114,7 @@ public class TalkingFragment extends Fragment {
                             voip.cut();
                         }
                     };
-                    activity.bindService(new Intent(activity, VoIPService.class), conn,Context.BIND_AUTO_CREATE);
+                    activity.bindService(new Intent(activity, TalkingService.class), conn,Context.BIND_AUTO_CREATE);
                     mSelectable = false;
                     outState = OutState.EARPHONE;
                     break;
