@@ -290,7 +290,6 @@ public class VoIPService extends Service {
         Runnable probeHost = new Runnable() {
             @Override
             public void run() {
-                MainViewModel.CompassColor color;
                 try {
                     if (probe.probe(tunnel.getHostAddr(), tunnel.getPort(), 1) == 1) {
                         mProbeListener.onProbe(1,1);
