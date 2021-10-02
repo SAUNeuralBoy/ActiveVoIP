@@ -14,6 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ActiveVoIP">
         <service
+            android:name=".VoIPService"
+            android:enabled="true"
+            android:exported="false"></service>
+        <service
             android:name=".TalkingService"
             android:enabled="true"
             android:exported="false" />
