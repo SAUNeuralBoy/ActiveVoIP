@@ -28,7 +28,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -42,12 +43,9 @@ import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.talking.TalkingFragment;
-import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.android.activevoip.voip.AudioCodec;
 import team.genesis.data.UUID;
-import team.genesis.tunnels.ActiveDatagramTunnel;
 
-import static java.lang.System.currentTimeMillis;
 import static java.lang.System.exit;
 
 public class VoIPService extends Service {
@@ -187,6 +185,7 @@ public class VoIPService extends Service {
             }
         };
         AudioManager audioManager = (AudioManager) VoIPService.this.getSystemService(Context.AUDIO_SERVICE);
+        final AudioDeviceInfo[] lastDevice = {null};
         Runnable detect = new Runnable() {
             @Override
             public void run() {
@@ -197,16 +196,23 @@ public class VoIPService extends Service {
                         device = i;
                         break;
                     }
-                    if(i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP||i.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
+                    if (i.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) device = i;
+                    if (i.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP&&device==null)
                         device = i;
                     if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
                         earPhone = i;
                     if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
                         stereo = i;
                 }
-                if(device!=null) {
+                if(device!=null&&!Objects.equals(lastDevice[0], device)) {
                     audioTrack.setPreferredDevice(device);
                     fragment.disableSelect();
+                    if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&!audioManager.isBluetoothScoOn()){
+                        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                        audioManager.startBluetoothSco();
+                        audioManager.setBluetoothScoOn(true);
+                    }
+                    lastDevice[0] = device;
                 }
                 else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
                 uiHandler.postDelayed(this,200);
