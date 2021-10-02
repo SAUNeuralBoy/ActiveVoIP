@@ -95,6 +95,7 @@ public class TalkingFragment extends Fragment {
         contact = viewModel.getContact();
         uiHandler = new Handler();
         NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment);
+        /*
         statusObserver = status -> {
             switch (status) {
                 case TALKING:
@@ -276,7 +277,7 @@ public class TalkingFragment extends Fragment {
             e.printStackTrace();
             exit(0);
         }
-        });
+        });*/
         buttonCut = root.findViewById(R.id.button_cut);
         buttonCut.setOnClickListener(v -> onCut());
         buttonSwitch = root.findViewById(R.id.button_switch);

@@ -1,14 +1,20 @@
 package team.genesis.android.activevoip;
 
 import android.app.AlertDialog;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 
+import androidx.core.app.NotificationCompat;
 import androidx.room.Room;
 
 import java.io.IOException;
@@ -75,6 +81,31 @@ public class VoIPService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        String id = "voip_notification_channel_id";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            //用户可见的通道名称
+            String channelName = "VoIP Foreground Service Notification";
+            //通道的重要程度
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel notificationChannel = new NotificationChannel(id, channelName, importance);
+            notificationChannel.setDescription("Channel description");
+            //LED灯
+            notificationChannel.enableLights(true);
+            notificationChannel.setLightColor(Color.RED);
+            //震动
+            notificationChannel.setVibrationPattern(new long[]{0, 1000, 500, 1000});
+            notificationChannel.enableVibration(true);
+            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(notificationChannel);
+            }
+        }
+        startForeground(1,
+                new NotificationCompat.Builder(this,id)
+                        .setSmallIcon(R.drawable.ic_launcher_foreground)
+                        .setContentTitle("ActiveVoIP")
+                        .setContentText("Running")
+                        .setWhen(System.currentTimeMillis()).build());
         dao = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build().getDao();
         sp = SPManager.getManager(this);
         try {
@@ -281,6 +312,10 @@ public class VoIPService extends Service {
     private ContactDao dao;
     private SPManager sp;
     private ClientTunnel tunnel;
+
+    public SPManager getManager(){
+        return sp;
+    }
 
     public void update() {
         tunnel.setSrc(sp.getUUID());

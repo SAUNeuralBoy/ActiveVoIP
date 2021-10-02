@@ -57,6 +57,10 @@ import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
 
 import javax.crypto.spec.SecretKeySpec;
 
@@ -97,6 +101,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        uiHandler = new Handler();
+
+        CountDownLatch latch = new CountDownLatch(1);
         if(!isServiceRunning(VoIPService.class))
             startService(new Intent(this,VoIPService.class));
         conn = new ServiceConnection() {
@@ -104,6 +111,89 @@ public class MainActivity extends AppCompatActivity {
             public void onServiceConnected(ComponentName name, IBinder binder) {
                 service = ((VoIPService.VoIPBinder)binder).getService();
                 service.setActivity(MainActivity.this);
+                service.setProbeListener((recv, cnt) -> {
+                    MainViewModel.CompassColor color;
+                    if(recv==cnt) color = MainViewModel.CompassColor.FINE;
+                    else if(recv>0) color = MainViewModel.CompassColor.DISTURBING;
+                    else color = MainViewModel.CompassColor.ERROR;
+                    if(viewModel.getCompassColor().getValue()!=color)
+                        uiHandler.post(()->viewModel.getCompassColor().setValue(color));
+                });
+                uiHandler.post(() -> {
+                    talkingViewModel = new ViewModelProvider(MainActivity.this).get(TalkingViewModel.class);
+                    setContentView(R.layout.activity_main);
+                    Toolbar toolbar = findViewById(R.id.toolbar);
+                    setSupportActionBar(toolbar);
+                    FloatingActionButton fab = findViewById(R.id.fab);
+                    fab.setOnClickListener(view -> Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                            .setAction("Action", null).show());
+                    DrawerLayout drawer = findViewById(R.id.drawer_layout);
+                    NavigationView navigationView = findViewById(R.id.nav_view);
+                    // Passing each menu ID as a set of Ids because each
+                    // menu should be considered as top level destinations.
+                    mAppBarConfiguration = new AppBarConfiguration.Builder(
+                            R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
+                            .setDrawerLayout(drawer)
+                            .build();
+                    NavController navController = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment);
+                    NavigationUI.setupActionBarWithNavController(MainActivity.this, navController, mAppBarConfiguration);
+                    NavigationUI.setupWithNavController(navigationView, navController);
+                    findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
+                    findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
+
+                    viewModel = new ViewModelProvider(MainActivity.this).get(MainViewModel.class);
+
+
+                    viewModel.getCompassColor().observe(MainActivity.this, compassColor -> {
+                        int color = R.color.error_color;
+                        switch (compassColor){
+                            case FINE:
+                                color = R.color.fine_color;
+                                break;
+                            case DISTURBING:
+                                color = R.color.distrubing_color;
+                                break;
+                        }
+                        ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
+                    });
+
+                    findViewById(R.id.button_add).setOnClickListener(v -> {
+                        PopupMenu popup = new PopupMenu(MainActivity.this,v);
+                        popup.setOnMenuItemClickListener(item -> {
+                            UUID uuid = new UUID();
+                            final EditText input = new EditText(MainActivity.this);
+                            int itemId = item.getItemId();
+                            Contact contact = new Contact();
+                            Runnable r = () -> {
+                                contact.uuid = uuid;
+                                service.createPair(contact);
+                            };
+                            if(itemId==R.id.action_add_from_contact_name){
+                                UI.makeInputWindow(MainActivity.this,input,getString(R.string.contact_input_title), (dialog, which) -> {
+                                    if(input.getText().toString().equals("")){
+                                        UI.makeSnackBar(v,getString(R.string.contact_empty));
+                                        return;
+                                    }
+                                    uuid.fromBytes(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8)));
+                                    contact.alias = input.getText().toString();
+                                    r.run();
+                                });
+                            }else if(itemId==R.id.action_add_uuid){
+                                UI.makeInputWindow(MainActivity.this,input,getString(R.string.from_uuid), (dialog, which) -> {
+                                    if(input.getText().toString().equals("")){
+                                        UI.makeSnackBar(v,getString(R.string.contact_empty));
+                                        return;
+                                    }
+                                    uuid.fromBytes(Crypto.from64(input.getText().toString()));
+                                    r.run();
+                                });
+                            }else return false;
+                            return true;
+                        });
+                        popup.inflate(R.menu.add);
+                        popup.show();
+                    });
+                });
             }
 
             @Override
@@ -112,95 +202,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         bindService(new Intent(this,VoIPService.class),conn,Context.BIND_ABOVE_CLIENT|Context.BIND_IMPORTANT);
-
-        talkingViewModel = new ViewModelProvider(this).get(TalkingViewModel.class);
-        setContentView(R.layout.activity_main);
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        FloatingActionButton fab = findViewById(R.id.fab);
-        fab.setOnClickListener(view -> Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                .setAction("Action", null).show());
-        DrawerLayout drawer = findViewById(R.id.drawer_layout);
-        NavigationView navigationView = findViewById(R.id.nav_view);
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
-        mAppBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
-                .setDrawerLayout(drawer)
-                .build();
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
-        NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
-        NavigationUI.setupWithNavController(navigationView, navController);
-        findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
-        findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
-
-        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
-
-
-        viewModel.getCompassColor().observe(this, compassColor -> {
-            int color = R.color.error_color;
-            switch (compassColor){
-                case FINE:
-                    color = R.color.fine_color;
-                    break;
-                case DISTURBING:
-                    color = R.color.distrubing_color;
-                    break;
-            }
-            ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
-        });
-
-        findViewById(R.id.button_add).setOnClickListener(v -> {
-            PopupMenu popup = new PopupMenu(this,v);
-            popup.setOnMenuItemClickListener(item -> {
-                UUID uuid = new UUID();
-                final EditText input = new EditText(this);
-                int itemId = item.getItemId();
-                Contact contact = new Contact();
-                Runnable r = () -> {
-                    contact.uuid = uuid;
-                    service.createPair(contact);
-                };
-                if(itemId==R.id.action_add_from_contact_name){
-                    UI.makeInputWindow(this,input,getString(R.string.contact_input_title), (dialog, which) -> {
-                        if(input.getText().toString().equals("")){
-                            UI.makeSnackBar(v,getString(R.string.contact_empty));
-                            return;
-                        }
-                        uuid.fromBytes(Crypto.md5(input.getText().toString().getBytes(StandardCharsets.UTF_8)));
-                        contact.alias = input.getText().toString();
-                        r.run();
-                    });
-                }else if(itemId==R.id.action_add_uuid){
-                    UI.makeInputWindow(this,input,getString(R.string.from_uuid), (dialog, which) -> {
-                        if(input.getText().toString().equals("")){
-                            UI.makeSnackBar(v,getString(R.string.contact_empty));
-                            return;
-                        }
-                        uuid.fromBytes(Crypto.from64(input.getText().toString()));
-                        r.run();
-                    });
-                }else return false;
-                return true;
-            });
-            popup.inflate(R.menu.add);
-            popup.show();
-        });
-
-
-
-
-        uiHandler = new Handler();
-        service.setProbeListener((recv, cnt) -> {
-            MainViewModel.CompassColor color;
-            if(recv==cnt) color = MainViewModel.CompassColor.FINE;
-            else if(recv>0) color = MainViewModel.CompassColor.DISTURBING;
-            else color = MainViewModel.CompassColor.ERROR;
-            if(viewModel.getCompassColor().getValue()!=color)
-                uiHandler.post(()->viewModel.getCompassColor().setValue(color));
-        });
-
-
     }
 
     @Override
@@ -227,6 +228,9 @@ public class MainActivity extends AppCompatActivity {
     }
     public int getPort(){
         return sp.getPort();
+    }
+    public VoIPService getService(){
+        return service;
     }
 
     @Override

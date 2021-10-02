@@ -39,7 +39,7 @@ public class GalleryFragment extends Fragment {
         EditText inputHostname = view.findViewById(R.id.input_hostname);
         EditText inputPort = view.findViewById(R.id.input_port);
 
-        SPManager sp = SPManager.getManager((MainActivity) getActivity());
+        SPManager sp = ((MainActivity)requireActivity()).getService().getManager();
         inputHostname.setText(sp.getHostname());
         inputPort.setText(String.valueOf(sp.getPort()));
         Handler networkHandler = UI.getCycledHandler("network_test");

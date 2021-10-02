@@ -37,7 +37,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             Contact contact = new Contact();
             contact.alias = holder.contactAlias.getText().toString();
             contact.uuid = new UUID(Crypto.from64(holder.contactUUID.getText().toString()));
-            mActivity.createPair(contact);
+            mActivity.getService().createPair(contact);
         });
         holder.buttonAccept.setOnClickListener(v -> {
             ContactDao dao = mActivity.getDao();

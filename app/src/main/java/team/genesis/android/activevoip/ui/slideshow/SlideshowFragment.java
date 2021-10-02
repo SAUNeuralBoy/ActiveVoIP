@@ -30,6 +30,7 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Objects;
 
 import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.MainActivity;
@@ -50,7 +51,7 @@ public class SlideshowFragment extends Fragment {
 
         EditText inputUUID = view.findViewById(R.id.input_uuid);
 
-        SPManager sp = SPManager.getManager((MainActivity) getActivity());
+        SPManager sp = ((MainActivity)requireActivity()).getService().getManager();
         inputUUID.setText(sp.getUUID64());
 
         view.findViewById(R.id.button_input_contact_name).setOnClickListener(v -> {
@@ -75,7 +76,7 @@ public class SlideshowFragment extends Fragment {
             });
         });
         view.findViewById(R.id.button_copy_uuid).setOnClickListener(v -> {
-            ((ClipboardManager)getActivity().getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Label",inputUUID.getText()));
+            ((ClipboardManager) requireActivity().getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Label",inputUUID.getText()));
             UI.makeSnackBar(view,getString(R.string.copied));
         });
         view.findViewById(R.id.button_apply_uuid).setOnClickListener(v -> {
