@@ -1,12 +1,18 @@
 package team.genesis.android.activevoip;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.app.AlertDialog;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.view.Menu;
@@ -52,6 +58,8 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
+import javax.crypto.spec.SecretKeySpec;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.data.Contact;
@@ -61,6 +69,7 @@ import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
+import team.genesis.android.activevoip.ui.talking.TalkingFragment;
 import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.data.UUID;
 import team.genesis.network.DNSLookupThread;
@@ -79,17 +88,32 @@ public class MainActivity extends AppCompatActivity {
 
     private MainViewModel viewModel;
     private TalkingViewModel talkingViewModel;
+    private VoIPService service;
+    private ServiceConnection conn;
 
-    private ClientTunnel tunnel;
-
-    private ContactDao dao;
     private Handler uiHandler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if(!isServiceRunning(VoIPService.class))
+            startService(new Intent(this,VoIPService.class));
+        conn = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                service = ((VoIPService.VoIPBinder)binder).getService();
+                service.setActivity(MainActivity.this);
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                service.setActivity(null);
+            }
+        };
+        bindService(new Intent(this,VoIPService.class),conn,Context.BIND_ABOVE_CLIENT|Context.BIND_IMPORTANT);
+
         talkingViewModel = new ViewModelProvider(this).get(TalkingViewModel.class);
-        dao = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build().getDao();
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -112,16 +136,6 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
-        sp = SPManager.getManager(this);
-        try {
-            tunnel = new ClientTunnel("activity",sp.getHostname(),sp.getPort(),sp.getUUID());
-        } catch (SocketException e) {
-            e.printStackTrace();
-            exit(0);
-            return;
-        }
-        update();
-        tunnel.observe(this,viewModel.getPrefLiveData());
 
         viewModel.getCompassColor().observe(this, compassColor -> {
             int color = R.color.error_color;
@@ -145,7 +159,7 @@ public class MainActivity extends AppCompatActivity {
                 Contact contact = new Contact();
                 Runnable r = () -> {
                     contact.uuid = uuid;
-                    createPair(contact);
+                    service.createPair(contact);
                 };
                 if(itemId==R.id.action_add_from_contact_name){
                     UI.makeInputWindow(this,input,getString(R.string.contact_input_title), (dialog, which) -> {
@@ -173,195 +187,18 @@ public class MainActivity extends AppCompatActivity {
             popup.show();
         });
 
-        final MainActivity tActivity = this;
-        tunnel.setRecvListener(msg->uiHandler.post(()->{try {
-            ByteBuf buf = Unpooled.copiedBuffer(msg.data);
-            ByteBuf repBuf = Unpooled.buffer();
-            switch (Ctrl.values()[buf.readInt()]) {
-                case PAIR:{
-                    KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-                    kpg.initialize(new KeyGenParameterSpec.Builder(
-                            Crypto.to64(msg.src.getBytes()),
-                            KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                            .setDigests(KeyProperties.DIGEST_SHA256,
-                                    KeyProperties.DIGEST_SHA512)
-                            .build());
-                    KeyPair kp = kpg.generateKeyPair();
-                    Contact contact;
-                    ContactEntity result = ContactDB.findContactByUUID(dao,msg.src);
-                    if(result==null)
-                        contact = new Contact();
-                    else {
-                        contact = ContactDB.getContactOrDelete(dao,result);
-                        if(contact==null)   return;
-                    }
-                    contact.uuid = msg.src;
-                    contact.ourPk = kp.getPublic().getEncoded();
 
-                    contact.otherPk = Network.readNbytes(buf,500);
 
-                    repBuf.writeInt(Ctrl.PAIR_RESPONSE.ordinal());
-                    Network.writeBytes(repBuf,contact.ourPk);
-                    Network.writeBytes(repBuf,contact.otherPk);
-                    write(Network.readAllBytes(repBuf),msg.src);
 
-                    contact.status = Contact.Status.PAIR_RCVD;
-                    dao.insertContact(new ContactEntity(contact));
-                    break;}
-                case PAIR_RESPONSE:{
-                    ContactEntity result = ContactDB.findContactByUUID(dao,msg.src);
-                    if(result==null)    return;
-                    Contact contact = ContactDB.getContactOrDelete(dao,result);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.PAIR_SENT)   return;
-                    contact.otherPk = Network.readNbytes(buf,500);
-                    byte[] chk = Network.readNbytes(buf,500);
-                    if(!Arrays.equals(contact.ourPk,chk))   return;
-                    try {
-                        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-                        keyStore.load(null);
-                        if (!keyStore.containsAlias(Crypto.to64(msg.src.getBytes())))
-                            return;
-                    }catch (KeyStoreException | CertificateException | IOException e){
-                        e.printStackTrace();
-                        exit(0);
-                    }
-
-                    repBuf.writeInt(Ctrl.PAIR_ACK.ordinal());
-                    write(Network.readAllBytes(repBuf),msg.src);
-                    contact.status = Contact.Status.CONFIRM_WAIT;
-                    dao.insertContact(new ContactEntity(contact));
-                    break;}
-                case PAIR_ACK: {
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if (contact.status == Contact.Status.PAIR_RCVD) {
-                        contact.status = Contact.Status.CONFIRM_WAIT;
-                        dao.insertContact(new ContactEntity(contact));
-                    }
-                    break;
-                }
-                case CALL:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    Signature s = Signature.getInstance("SHA256withECDSA");
-                    s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
-                    byte[] otherPk = Network.readNbytes(buf,500);
-                    s.update(otherPk);
-                    byte[] sign = Network.readNbytes(buf,500);
-                    if(!s.verify(sign)){
-                        AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
-                        builder.setTitle(R.string.dangerous);
-                        builder.setMessage(R.string.mitm_warning_msg);
-                        builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
-                        builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
-                        builder.show();
-                        return;
-                    }
-                    switch (talkingViewModel.getStatus()){
-                        case DEAD:
-                            talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
-                            talkingViewModel.setContact(contact);
-                            talkingViewModel.setOtherPk(otherPk);
-                            navController.navigate(R.id.nav_talking);
-                            break;
-                        case INCOMING:
-                            if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                            if(!Arrays.equals(otherPk,talkingViewModel.getOtherPk()))   return;
-                            talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
-                            break;
-                        case CALLING:
-                        case TALKING:
-                        case INVOKING:
-                            return;
-                    }
-                    break;
-                }
-                case CALL_REJECT:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
-                    talkingViewModel.setStatus(TalkingViewModel.Status.REJECTED);
-                    break;
-                }
-                case CALL_RESPONSE:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
-                    Signature s = Signature.getInstance("SHA256withECDSA");
-                    s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
-                    byte[] otherPk = Network.readNbytes(buf,500);
-                    s.update(otherPk);
-                    byte[] sign = Network.readNbytes(buf,500);
-                    if(!s.verify(sign)){
-                        AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
-                        builder.setTitle(R.string.dangerous);
-                        builder.setMessage(R.string.mitm_warning_msg);
-                        builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
-                        builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
-                        builder.show();
-                        return;
-                    }
-                    if(!Arrays.equals(talkingViewModel.getOurPk(),Network.readNbytes(buf,500))) return;
-                    talkingViewModel.setOtherPk(otherPk);
-                    talkingViewModel.setStatus(TalkingViewModel.Status.CALL_ACCEPTED);
-                    break;
-                }
-                case CALL_ACK:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.ACCEPT_CALL)  return;
-                    talkingViewModel.setStatus(TalkingViewModel.Status.TALKING);
-                    break;
-                }
-            }
-        }catch (IndexOutOfBoundsException | SignatureException | InvalidKeySpecException | InvalidKeyException ignored){}
-        catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
-            e.printStackTrace();
-            exit(0);
-        }
-        }));
-
-        Handler probeHandler = UI.getCycledHandler("probe");
-        UDPProbe probe;
-        try {
-            probe = UDPActiveDatagramTunnel.getProbe(1000);
-        } catch (SocketException e) {
-            e.printStackTrace();
-            exit(0);
-            return;
-        }
         uiHandler = new Handler();
-        Runnable probeHost = new Runnable() {
-            @Override
-            public void run() {
-                MainViewModel.CompassColor color;
-                try {
-                    if (probe.probe(tunnel.getHostAddr(), tunnel.getPort(), 1) == 1) {
-                        color = MainViewModel.CompassColor.FINE;
-                    } else {
-                        if (probe.probe(tunnel.getHostAddr(), tunnel.getPort(), 10) > 0)
-                            color = MainViewModel.CompassColor.DISTURBING;
-                        else
-                            color = MainViewModel.CompassColor.ERROR;
-                    }
-                    if(viewModel.getCompassColor().getValue()!=color)
-                        uiHandler.post(()->viewModel.getCompassColor().setValue(color));
-                }catch (IOException e){
-                    e.printStackTrace();
-                }finally {
-                    probeHandler.postDelayed(this,2500);
-                }
-            }
-        };
-        probeHandler.post(probeHost);
+        service.setProbeListener((recv, cnt) -> {
+            MainViewModel.CompassColor color;
+            if(recv==cnt) color = MainViewModel.CompassColor.FINE;
+            else if(recv>0) color = MainViewModel.CompassColor.DISTURBING;
+            else color = MainViewModel.CompassColor.ERROR;
+            if(viewModel.getCompassColor().getValue()!=color)
+                uiHandler.post(()->viewModel.getCompassColor().setValue(color));
+        });
 
 
     }
@@ -382,38 +219,9 @@ public class MainActivity extends AppCompatActivity {
     }
     private SPManager sp;
     public ContactDao getDao(){
-        return dao;
+        return service.getDao();
     }
-    public void createPair(Contact contact){
-        ByteBuf buf = Unpooled.buffer();
-        buf.writeInt(Ctrl.PAIR.ordinal());
-        KeyPairGenerator kpg;
-        try {
-            kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-            kpg.initialize(new KeyGenParameterSpec.Builder(
-                    Crypto.to64(contact.uuid.getBytes()),
-                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                    .setDigests(KeyProperties.DIGEST_SHA256,
-                            KeyProperties.DIGEST_SHA512)
-                    .build());
-        } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
-            e.printStackTrace();
-            exit(0);
-            return;
-        }
-        KeyPair kp = kpg.generateKeyPair();
-        contact.ourPk = kp.getPublic().getEncoded();
-        Network.writeBytes(buf,contact.ourPk);
-        write(Network.readAllBytes(buf),contact.uuid);
-        contact.status = Contact.Status.PAIR_SENT;
-        dao.insertContact(new ContactEntity(contact));
-    }
-    public void write(byte[] data,UUID dst){
-        tunnel.send(data,dst);
-    }
-    public void update(){
-        viewModel.getPrefLiveData().setValue(new ClientTunnel.Preference(sp.getUUID(),sp.getHostname(),sp.getPort()));
-    }
+
     public String getHostname(){
         return sp.getHostname();
     }
@@ -434,5 +242,21 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)!= PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(this,new String[]{Manifest.permission.RECORD_AUDIO},MainActivity.REQ_CODE_PERMISSION);
+    }
+
+    private boolean isServiceRunning(Class<?> serviceClass) {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unbindService(conn);
     }
 }

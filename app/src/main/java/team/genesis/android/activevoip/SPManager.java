@@ -14,14 +14,14 @@ import team.genesis.data.UUID;
 public class SPManager {
     private SharedPreferences sp;
     private SharedPreferences.Editor editor;
-    private final MainActivity mainActivity;
-    public SPManager(MainActivity activity){
-        mainActivity = activity;
+    private final VoIPService mService;
+    public SPManager(VoIPService service){
+        mService = service;
         try {
             sp = EncryptedSharedPreferences.create(
                     sharedPrefsFile,
                     keystoreAlias,
-                    activity.getBaseContext(),
+                    mService.getBaseContext(),
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
@@ -33,12 +33,12 @@ public class SPManager {
             System.exit(0);
         }
     }
-    public static SPManager getManager(MainActivity activity){
-        return new SPManager(activity);
+    public static SPManager getManager(VoIPService service){
+        return new SPManager(service);
     }
     public void commit(){
         editor.commit();
-        mainActivity.update();
+        mService.update();
     }
     public UUID getUUID(){
         String id64 = getUUID64();
