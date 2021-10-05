@@ -27,6 +27,7 @@ import com.google.android.material.navigation.NavigationView;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -57,6 +58,7 @@ import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -96,14 +98,15 @@ public class MainActivity extends AppCompatActivity {
     private ServiceConnection conn;
 
     private Handler uiHandler;
+    private NavController navController;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         uiHandler = new Handler();
+        viewModel = new ViewModelProvider(MainActivity.this).get(MainViewModel.class);
 
-        CountDownLatch latch = new CountDownLatch(1);
         if(!isServiceRunning(VoIPService.class))
             startService(new Intent(this,VoIPService.class));
         conn = new ServiceConnection() {
@@ -111,10 +114,10 @@ public class MainActivity extends AppCompatActivity {
             public void onServiceConnected(ComponentName name, IBinder binder) {
                 service = ((VoIPService.VoIPBinder)binder).getService();
                 service.setActivity(MainActivity.this);
-                service.setProbeListener((recv, cnt) -> {
+                service.getLiveProbeResult().observe(MainActivity.this, aDouble -> {
                     MainViewModel.CompassColor color;
-                    if(recv==cnt) color = MainViewModel.CompassColor.FINE;
-                    else if(recv>0) color = MainViewModel.CompassColor.DISTURBING;
+                    if(aDouble>=1) color = MainViewModel.CompassColor.FINE;
+                    else if(aDouble>0) color = MainViewModel.CompassColor.DISTURBING;
                     else color = MainViewModel.CompassColor.ERROR;
                     if(viewModel.getCompassColor().getValue()!=color)
                         uiHandler.post(()->viewModel.getCompassColor().setValue(color));
@@ -135,13 +138,12 @@ public class MainActivity extends AppCompatActivity {
                             R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
                             .setDrawerLayout(drawer)
                             .build();
-                    NavController navController = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment);
+                    navController = Navigation.findNavController(MainActivity.this, R.id.nav_host_fragment);
                     NavigationUI.setupActionBarWithNavController(MainActivity.this, navController, mAppBarConfiguration);
                     NavigationUI.setupWithNavController(navigationView, navController);
                     findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
                     findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
 
-                    viewModel = new ViewModelProvider(MainActivity.this).get(MainViewModel.class);
 
 
                     viewModel.getCompassColor().observe(MainActivity.this, compassColor -> {
@@ -192,6 +194,12 @@ public class MainActivity extends AppCompatActivity {
                         });
                         popup.inflate(R.menu.add);
                         popup.show();
+                    });
+                    service.getLiveStat().observe(MainActivity.this, status -> {
+                        if(status== VoIPService.Status.READY)   return;
+                        navController.navigate(R.id.nav_talking);
+                        if(!(Objects.requireNonNull(getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment)).getChildFragmentManager().getPrimaryNavigationFragment() instanceof TalkingFragment))
+                            navController.navigate(R.id.nav_talking);
                     });
                 });
             }

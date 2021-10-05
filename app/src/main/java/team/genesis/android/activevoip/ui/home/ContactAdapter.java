@@ -79,10 +79,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             ContactDao dao = mActivity.getDao();
             Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
             if(contact==null)   return;
-            TalkingViewModel talkingViewModel = new ViewModelProvider(mActivity).get(TalkingViewModel.class);
-            talkingViewModel.setContact(contact);
-            talkingViewModel.setStatus(TalkingViewModel.Status.CALLING);
-            Navigation.findNavController(mActivity, R.id.nav_host_fragment).navigate(R.id.nav_talking);
+            mActivity.getService().startCalling(contact);
         });
         return holder;
     }

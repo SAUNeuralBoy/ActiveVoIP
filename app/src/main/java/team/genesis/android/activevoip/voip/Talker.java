@@ -1,11 +1,5 @@
-package team.genesis.android.activevoip;
+package team.genesis.android.activevoip.voip;
 
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.Service;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
@@ -13,12 +7,7 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
-import android.os.Binder;
-import android.os.Build;
 import android.os.Handler;
-import android.os.IBinder;
-
-import androidx.core.app.NotificationCompat;
 
 import java.net.SocketException;
 import java.security.InvalidAlgorithmParameterException;
@@ -39,32 +28,33 @@ import javax.crypto.spec.IvParameterSpec;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import team.genesis.android.activevoip.Crypto;
+import team.genesis.android.activevoip.Network;
+import team.genesis.android.activevoip.UI;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
-import team.genesis.android.activevoip.ui.talking.TalkingFragment;
-import team.genesis.android.activevoip.voip.AudioCodec;
 import team.genesis.data.UUID;
 
 import static java.lang.System.exit;
 
-public class TalkingService extends Service {
+public class Talker {
     public static final int AUDIO_SOURCE = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
     public static final int SAMPLE_RATE = 8000;
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
     public static final int RECORD_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
-    private UUID ourId;
-    private UUID otherId;
-    private SecretKey secretKey;
+    private final UUID otherId;
+    private final SecretKey secretKey;
     private ClientTunnel tunnel;
     private Cipher cipherEncrypt,cipherDecrypt;
     private boolean isRecording;
-    private TalkingFragment fragment;
     private AudioRecord audioRecord;
     private Handler asyncHandler;
 
     private AudioTrack audioTrack;
-    public TalkingService(){
+    private final AudioManager audioManager;
+
+    public Talker(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, AudioManager audioManager){
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding",cipherEncrypt.getProvider());
@@ -72,49 +62,9 @@ public class TalkingService extends Service {
             e.printStackTrace();
             exit(0);
         }
-    }
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        String id = "voip_notification_channel_id";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            //用户可见的通道名称
-            String channelName = "VoIP Foreground Service Notification";
-            //通道的重要程度
-            int importance = NotificationManager.IMPORTANCE_HIGH;
-            NotificationChannel notificationChannel = new NotificationChannel(id, channelName, importance);
-            notificationChannel.setDescription("Channel description");
-            //LED灯
-            notificationChannel.enableLights(true);
-            notificationChannel.setLightColor(Color.RED);
-            //震动
-            notificationChannel.setVibrationPattern(new long[]{0, 1000, 500, 1000});
-            notificationChannel.enableVibration(true);
-            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(notificationChannel);
-            }
-        }
-        startForeground(1,
-        new NotificationCompat.Builder(this,id)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Voice Communication")
-                .setContentText("Talking")
-                .setWhen(System.currentTimeMillis()).build());
-    }
-
-    @Override
-    public void onDestroy() {
-        stopForeground(true);
-        super.onDestroy();
-    }
-
-    public void init(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, TalkingFragment fragment){
-        this.ourId = ourId;
         this.otherId = otherId;
         this.secretKey = secretKey;
-        this.fragment = fragment;
+        this.audioManager = audioManager;
         try {
             tunnel = new ClientTunnel("voip",hostName,port,ourId);
         } catch (SocketException e) {
@@ -140,24 +90,24 @@ public class TalkingService extends Service {
             int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_NON_BLOCKING);
             if(len<0)   return;
             byte[] encoded = new byte[2048];
-            write(Ctrl.TALK_PACK,Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
+            write(Ctrl.TALK_PACK, Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
         };
 
         List<byte[]> incoming = Collections.synchronizedList(new LinkedList<>());
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
-        .setSampleRate(SAMPLE_RATE)
-        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .setSampleRate(SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
-        .setBufferSizeInBytes(recordBufSize)
+                .setBufferSizeInBytes(recordBufSize)
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()).build();
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()).build();
         audioTrack.setVolume(AudioTrack.getMaxVolume());
         audioTrack.play();
         tunnel.setRecvListener(msg -> {
             if(!msg.src.equals(otherId))    return;
-            Request req;
+            Talker.Request req;
             try {
                 req = parse(msg.data);
             } catch (Crypto.DecryptException e) {
@@ -169,7 +119,7 @@ public class TalkingService extends Service {
                     incoming.add(req.data);
                     break;
                 case TALK_CUT:
-                    fragment.onCut();
+                    cut();
             }
         });
         Runnable play = () -> {
@@ -183,7 +133,6 @@ public class TalkingService extends Service {
                 if(incoming.size()>25)  incoming.clear();
             }
         };
-        AudioManager audioManager = (AudioManager) TalkingService.this.getSystemService(Context.AUDIO_SERVICE);
         final AudioDeviceInfo[] lastDevice = {null};
         Runnable detect = new Runnable() {
             @Override
@@ -205,7 +154,7 @@ public class TalkingService extends Service {
                 }
                 if(device!=null&&!Objects.equals(lastDevice[0], device)) {
                     audioTrack.setPreferredDevice(device);
-                    fragment.disableSelect();
+                    //fragment.disableSelect();
                     if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&!audioManager.isBluetoothScoOn()){
                         audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                         audioManager.startBluetoothSco();
@@ -213,7 +162,7 @@ public class TalkingService extends Service {
                     }
                     lastDevice[0] = device;
                 }
-                else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
+                //else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
                 uiHandler.postDelayed(this,200);
             }
         };
@@ -244,9 +193,9 @@ public class TalkingService extends Service {
         exit(0);
     }
     }
-    public Request parse(byte[] pack) throws IndexOutOfBoundsException, Crypto.DecryptException {
+    public Talker.Request parse(byte[] pack) throws IndexOutOfBoundsException, Crypto.DecryptException {
         if(pack.length<=4+16)  throw new IndexOutOfBoundsException();
-        Request req = new Request();
+        Talker.Request req = new Talker.Request();
         ByteBuf buf = Unpooled.copiedBuffer(pack);
         req.ctrl = Ctrl.values()[buf.readInt()];
         byte[] cipher = new byte[pack.length-4];
@@ -265,16 +214,6 @@ public class TalkingService extends Service {
         }
         return req;
     }
-    public class VoIPBinder extends Binder{
-        public TalkingService getService(){
-            return TalkingService.this;
-        }
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return new VoIPBinder();
-    }
 
     private static class Request{
         Ctrl ctrl;
@@ -292,7 +231,6 @@ public class TalkingService extends Service {
         tunnel.release();
         audioTrack.stop();
         audioTrack.release();
-        stopSelf();
     }
     public void setOutDevice(AudioDeviceInfo device){
         audioTrack.setPreferredDevice(device);

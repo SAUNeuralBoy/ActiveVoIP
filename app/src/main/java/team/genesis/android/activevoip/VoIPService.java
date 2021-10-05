@@ -7,6 +7,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -15,10 +16,12 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 
 import androidx.core.app.NotificationCompat;
+import androidx.lifecycle.MutableLiveData;
 import androidx.room.Room;
 
 import java.io.IOException;
 import java.net.SocketException;
+import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -26,14 +29,22 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.security.UnrecoverableEntryException;
 import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
+import javax.crypto.KeyAgreement;
+import javax.crypto.spec.SecretKeySpec;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -43,8 +54,7 @@ import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
-import team.genesis.android.activevoip.ui.MainViewModel;
-import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
+import team.genesis.android.activevoip.voip.Talker;
 import team.genesis.data.UUID;
 import team.genesis.tunnels.UDPActiveDatagramTunnel;
 import team.genesis.tunnels.active.datagram.udp.UDPProbe;
@@ -55,6 +65,14 @@ public class VoIPService extends Service {
 
 
     private MainActivity mActivity;
+    private Handler uiHandler;
+    private KeyPair kp;
+    private KeyStore keyStore;
+    private Signature s;
+    private byte[] derivedKey;
+    private UUID ourId;
+    private UUID otherId;
+    private byte[] otherPkt;
 
     public VoIPService() {
         mActivity = null;
@@ -106,6 +124,16 @@ public class VoIPService extends Service {
                         .setContentTitle("ActiveVoIP")
                         .setContentText("Running")
                         .setWhen(System.currentTimeMillis()).build());
+        try {
+            keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            s = Signature.getInstance("SHA256withECDSA");
+        } catch (KeyStoreException | NoSuchAlgorithmException | IOException | CertificateException e) {
+            e.printStackTrace();
+            exit(0);
+        }
+        mStat = new MutableLiveData<>(Status.READY);
+        reset();
         dao = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build().getDao();
         sp = SPManager.getManager(this);
         try {
@@ -115,8 +143,9 @@ public class VoIPService extends Service {
             exit(0);
             return;
         }
-        Handler uiHandler = new Handler();
-        tunnel.setRecvListener(msg->uiHandler.post(()->{try {
+        countDown = null;
+        uiHandler = new Handler();
+        tunnel.setRecvListener(msg-> uiHandler.post(()->{try {
             ByteBuf buf = Unpooled.copiedBuffer(msg.data);
             ByteBuf repBuf = Unpooled.buffer();
             switch (Ctrl.values()[buf.readInt()]) {
@@ -160,11 +189,9 @@ public class VoIPService extends Service {
                     byte[] chk = Network.readNbytes(buf,500);
                     if(!Arrays.equals(contact.ourPk,chk))   return;
                     try {
-                        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-                        keyStore.load(null);
                         if (!keyStore.containsAlias(Crypto.to64(msg.src.getBytes())))
                             return;
-                    }catch (KeyStoreException | CertificateException | IOException e){
+                    }catch (KeyStoreException e){
                         e.printStackTrace();
                         exit(0);
                     }
@@ -184,89 +211,56 @@ public class VoIPService extends Service {
                     break;
                 }
                 case CALL:{
+                    if(getStat()!=Status.READY)  return;
                     Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
                     if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    Signature s = Signature.getInstance("SHA256withECDSA");
-                    s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
-                    byte[] otherPk = Network.readNbytes(buf,500);
-                    s.update(otherPk);
-                    byte[] sign = Network.readNbytes(buf,500);
-                    if(!s.verify(sign)&&mActivity!=null){
-                        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
-                        builder.setTitle(R.string.dangerous);
-                        builder.setMessage(R.string.mitm_warning_msg);
-                        builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
-                        builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
-                        builder.show();
-                        return;
-                    }
-                    //todo:refactor talkingFragment
-                    /*
-                    switch (talkingViewModel.getStatus()){
-                        case DEAD:
-                            talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
-                            talkingViewModel.setContact(contact);
-                            talkingViewModel.setOtherPk(otherPk);
-                            navController.navigate(R.id.nav_talking);
-                            break;
-                        case INCOMING:
-                            if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                            if(!Arrays.equals(otherPk,talkingViewModel.getOtherPk()))   return;
-                            talkingViewModel.setStatus(TalkingViewModel.Status.INVOKING);
-                            break;
-                        case CALLING:
-                        case TALKING:
-                        case INVOKING:
-                            return;
-                    }*/
-                    break;
-                }
-                //todo:refactor talkingFragment
-                    /*
-                case CALL_REJECT:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
-                    talkingViewModel.setStatus(TalkingViewModel.Status.REJECTED);
-                    break;
-                }
-                case CALL_RESPONSE:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.CALLING)  return;
-                    Signature s = Signature.getInstance("SHA256withECDSA");
+                    mContact = contact;
+
                     s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
                     byte[] otherPk = Network.readNbytes(buf,500);
                     s.update(otherPk);
                     byte[] sign = Network.readNbytes(buf,500);
                     if(!s.verify(sign)){
-                        AlertDialog.Builder builder = new AlertDialog.Builder(tActivity);
-                        builder.setTitle(R.string.dangerous);
-                        builder.setMessage(R.string.mitm_warning_msg);
-                        builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
-                        builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
-                        builder.show();
+                        alert();
+                        reset();
                         return;
                     }
-                    if(!Arrays.equals(talkingViewModel.getOurPk(),Network.readNbytes(buf,500))) return;
-                    talkingViewModel.setOtherPk(otherPk);
-                    talkingViewModel.setStatus(TalkingViewModel.Status.CALL_ACCEPTED);
+                    setStat(Status.INCOMING);
+
+                    break;
+                }
+                case CALL_REJECT:{
+                    if(getStat()!=Status.CALLING)  return;
+                    if(!msg.src.equals(mContact.uuid))    return;
+                    setStat(Status.REJECTED);
+                    break;
+                }
+                case CALL_RESPONSE:{
+                    if(getStat()!=Status.CALLING)  return;
+                    if(!mContact.uuid.equals(msg.src))  return;
+                    
+                    s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(mContact.otherPk)));
+                    otherPkt = Network.readNbytes(buf,500);
+                    s.update(otherPkt);
+                    byte[] sign = Network.readNbytes(buf,500);
+                    if(!s.verify(sign)){
+                        alert();
+                        return;
+                    }
+                    if(!Arrays.equals(kp.getPublic().getEncoded(),Network.readNbytes(buf,500))) return;
+                    performECDH();
+                    ByteBuf ack = Unpooled.buffer();
+                    ack.writeInt(Ctrl.CALL_ACK.ordinal());
+                    write(Network.readAllBytes(ack), msg.src);
+                    startTalking();
                     break;
                 }
                 case CALL_ACK:{
-                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
-                    if(contact==null)   return;
-                    if(contact.status!= Contact.Status.READY)   return;
-                    if(!contact.uuid.equals(talkingViewModel.getContact().uuid))    return;
-                    if(talkingViewModel.getStatus()!= TalkingViewModel.Status.ACCEPT_CALL)  return;
-                    talkingViewModel.setStatus(TalkingViewModel.Status.TALKING);
+                    if(getStat()!=Status.WAITING)   return;
+                    if(!mContact.uuid.equals(msg.src))    return;
+                    startTalking();
                     break;
-                }*/
+                }
             }
         }catch (IndexOutOfBoundsException | SignatureException | InvalidKeySpecException | InvalidKeyException ignored){}
         catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
@@ -284,18 +278,18 @@ public class VoIPService extends Service {
             return;
         }
 
-        mProbeListener = (recv, cnt) -> {
-
-        };
         Runnable probeHost = new Runnable() {
             @Override
             public void run() {
                 try {
                     if (probe.probe(tunnel.getHostAddr(), tunnel.getPort(), 1) == 1) {
-                        mProbeListener.onProbe(1,1);
+                        updateProbeResult(1.1);
                     } else {
                         int recv = probe.probe(tunnel.getHostAddr(), tunnel.getPort(), 10);
-                        mProbeListener.onProbe(recv,10);
+                        if(recv>0)
+                            updateProbeResult(recv/10.0);
+                        else
+                            updateProbeResult(-0.1);
                     }
                 }catch (IOException e){
                     e.printStackTrace();
@@ -304,8 +298,39 @@ public class VoIPService extends Service {
                 }
             }
         };
+        probeResult = new MutableLiveData<>(-0.1);
         probeHandler.post(probeHost);
 
+
+    }
+    private MutableLiveData<Double> probeResult;
+    public MutableLiveData<Double> getLiveProbeResult(){
+        return probeResult;
+    }
+    public void updateProbeResult(double result){
+        if(probeResult.getValue()==null||probeResult.getValue()==result)    return;
+        uiHandler.post(()->probeResult.setValue(result));
+    }
+
+    private void performECDH() {try {
+        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+        ka.init(kp.getPrivate());
+        ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(otherPkt)), true);
+        byte[] sharedSecret = ka.generateSecret();
+        MessageDigest hash = MessageDigest.getInstance("SHA-256");
+        hash.update(sharedSecret);
+        // Simple deterministic ordering
+        List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(kp.getPublic().getEncoded()), ByteBuffer.wrap(otherPkt));
+        Collections.sort(keys);
+        hash.update(keys.get(0));
+        hash.update(keys.get(1));
+        derivedKey = hash.digest();
+        ourId = new UUID(Crypto.md5(kp.getPublic().getEncoded()));
+        otherId = new UUID(Crypto.md5(otherPkt));
+    }catch (NoSuchAlgorithmException | InvalidKeyException | InvalidKeySpecException e) {
+        e.printStackTrace();
+        exit(0);
+    }
     }
 
     private ContactDao dao;
@@ -322,14 +347,70 @@ public class VoIPService extends Service {
         tunnel.update(sp.getHostname());
     }
 
-    public interface ProbeListener{
-        void onProbe(int recv,int cnt);
-    }
-    private ProbeListener mProbeListener;
-    public void setProbeListener(ProbeListener listener){
-        mProbeListener = listener;
+
+    public boolean startCalling(Contact contact){
+        mContact = contact;
+        ByteBuf buf = Unpooled.buffer();
+
+        byte[] signed = newTalk();
+        if (signed==null){
+            reset();
+            return false;
+        }
+        buf.writeBytes(signed);
+        setStat(Status.CALLING);
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                if (getStat()!=Status.CALLING) return;
+                write(Network.readAllBytes(buf), mContact.uuid);
+                uiHandler.postDelayed(this, 1000);
+            }
+        };
+        uiHandler.post(r);
+        return true;
     }
 
+    private byte[] newTalk(){try {
+        ByteBuf buf = Unpooled.buffer();
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
+        kpg.initialize(256);
+        kp = kpg.generateKeyPair();
+        byte[] ourPk = kp.getPublic().getEncoded();
+        buf.writeInt(Ctrl.CALL.ordinal());
+        Network.writeBytes(buf, ourPk);
+
+        if (!keyStore.containsAlias(Crypto.to64(mContact.uuid.getBytes()))) return null;
+        s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(mContact.uuid.getBytes()), null)).getPrivateKey());
+        s.update(ourPk);
+        byte[] sign = s.sign();
+        Network.writeBytes(buf, sign);
+        return Network.readAllBytes(buf);
+    } catch (InvalidKeyException | SignatureException | UnrecoverableEntryException | KeyStoreException e) {
+        return null;
+    } catch (NoSuchAlgorithmException e) {
+        e.printStackTrace();
+        exit(0);
+        return null;
+    }
+    }
+
+    private Contact mContact;
+    public Contact getContact(){
+        return mContact;
+    }
+    private MutableLiveData<Status> mStat;
+    private Status getStat(){
+        return mStat.getValue();
+    }
+    private void setStat(Status stat){
+        if(mStat.getValue()!=stat)
+            mStat.postValue(stat);
+    }
+    public MutableLiveData<Status> getLiveStat(){
+        return mStat;
+    }
+    private CountDownLatch countDown;
 
 
     public void createPair(Contact contact){
@@ -359,4 +440,53 @@ public class VoIPService extends Service {
     public void write(byte[] data, UUID dst){
         tunnel.send(data,dst);
     }
+    public void alert(){
+        if(mActivity==null) return;
+        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
+        builder.setTitle(R.string.dangerous);
+        builder.setMessage(R.string.mitm_warning_msg);
+        builder.setPositiveButton(R.string.panic, (dialog, which) -> {});
+        builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
+        builder.show();
+    }
+
+    public void reset(){
+        setStat(Status.READY);
+        mContact = null;
+    }
+    public void reject(){
+        if(mContact!=null){
+            ByteBuf buf = Unpooled.buffer();
+            buf.writeInt(Ctrl.CALL_REJECT.ordinal());
+            write(Network.readAllBytes(buf),mContact.uuid);
+            reset();
+        }
+    }
+    public void acceptCall(){
+        if(getStat()!=Status.INCOMING)  return;
+        ByteBuf buf = Unpooled.buffer();
+        byte[] signed = newTalk();
+        if(signed==null){
+            reset();
+            return;
+        }
+        buf.writeBytes(signed);
+        Network.writeBytes(buf,otherPkt);
+        setStat(Status.WAITING);
+        write(Network.readAllBytes(buf),mContact.uuid);
+    }
+    public enum Status{
+        READY,CALLING,INCOMING,REJECTED,WAITING,TALKING
+    }
+    public void startTalking(){
+        talker = new Talker(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),sp.getHostname(),sp.getPort(), (AudioManager) getSystemService(Context.AUDIO_SERVICE));
+        talker.startTalking();
+        setStat(Status.TALKING);
+    }
+    public void cut(){
+        if(talker==null)    return;
+        talker.cut();
+        talker = null;
+    }
+    private Talker talker;
 }

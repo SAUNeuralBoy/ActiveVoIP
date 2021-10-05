@@ -1,11 +1,6 @@
 package team.genesis.android.activevoip.ui.talking;
 
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
-import android.content.res.ColorStateList;
-import android.media.AudioDeviceInfo;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
@@ -16,69 +11,32 @@ import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import android.os.Handler;
-import android.os.IBinder;
-import android.security.keystore.KeyProperties;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.Signature;
-import java.security.SignatureException;
-import java.security.UnrecoverableEntryException;
-import java.security.cert.CertificateException;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
-import javax.crypto.KeyAgreement;
-import javax.crypto.spec.SecretKeySpec;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.MainActivity;
-import team.genesis.android.activevoip.Network;
 import team.genesis.android.activevoip.R;
 import team.genesis.android.activevoip.UI;
-import team.genesis.android.activevoip.TalkingService;
+import team.genesis.android.activevoip.VoIPService;
 import team.genesis.android.activevoip.data.Contact;
-import team.genesis.android.activevoip.network.Ctrl;
-import team.genesis.data.UUID;
-
-import static java.lang.System.exit;
 
 
 public class TalkingFragment extends Fragment {
 
-    private TalkingViewModel viewModel;
-    private Contact contact;
-    private TextView textStatus;
-    private Handler uiHandler;
     private MainActivity activity;
-    private byte[] derivedKey;
-    private UUID ourId;
-    private UUID otherId;
-    private KeyPair kp;
-    private Observer<TalkingViewModel.Status> statusObserver;
-    private TalkingService voip;
-    private ServiceConnection conn;
-    private ImageButton buttonCut;
-    private ImageButton buttonSwitch;
+    private VoIPService service;
+    private TalkingViewModel viewModel;
+    private TextView textStatus;
+    private LinearLayout layoutIncoming;
+    private LinearLayout layoutTalking;
+    private NavController navController;
+    private Handler uiHandler;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,216 +47,49 @@ public class TalkingFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         activity = (MainActivity) requireActivity();
-        viewModel = new ViewModelProvider(requireActivity()).get(TalkingViewModel.class);
-        View root = inflater.inflate(R.layout.fragment_talking, container, false);
-        textStatus = root.findViewById(R.id.status_talking);
-        contact = viewModel.getContact();
+        service = activity.getService();
         uiHandler = new Handler();
-        NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment);
-        /*
-        statusObserver = status -> {
-            switch (status) {
-                case TALKING:
-                    textStatus.setText(R.string.talking);
-                    root.findViewById(R.id.layout_incoming_action).setVisibility(View.GONE);
-                    root.findViewById(R.id.layout_talking).setVisibility(View.VISIBLE);
-                    conn = new ServiceConnection() {
-                        @Override
-                        public void onServiceConnected(ComponentName name, IBinder service) {
-                            voip = ((TalkingService.VoIPBinder)service).getService();
-                            voip.init(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),activity.getHostname(),activity.getPort(),TalkingFragment.this);
-                            voip.startTalking();
-                        }
-
-                        @Override
-                        public void onServiceDisconnected(ComponentName name) {
-                            voip.cut();
-                        }
-                    };
-                    activity.bindService(new Intent(activity, TalkingService.class), conn,Context.BIND_AUTO_CREATE);
-                    mSelectable = false;
-                    outState = OutState.EARPHONE;
-                    break;
-                case REJECTED: {
-                    UI.makeSnackBar(root, TalkingFragment.this.getString(R.string.call_refused));
-                    navController.navigate(R.id.nav_home);
+        viewModel = new ViewModelProvider(activity).get(TalkingViewModel.class);
+        View root = inflater.inflate(R.layout.fragment_talking, container, false);
+        navController = Navigation.findNavController(activity, R.id.nav_host_fragment);
+        textStatus = root.findViewById(R.id.status_talking);
+        layoutIncoming = root.findViewById(R.id.layout_incoming_action);
+        layoutTalking = root.findViewById(R.id.layout_talking);
+        service.getLiveStat().observe(getViewLifecycleOwner(), new Observer<VoIPService.Status>() {
+            @Override
+            public void onChanged(VoIPService.Status status) {
+                if(status== VoIPService.Status.READY) {
+                    backHome();
                     return;
                 }
-                case CALL_ACCEPTED: {
-                    try {
-                        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
-                        ka.init(kp.getPrivate());
-                        ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(viewModel.getOtherPk())), true);
-                        byte[] sharedSecret = ka.generateSecret();
-                        MessageDigest hash = MessageDigest.getInstance("SHA-256");
-                        hash.update(sharedSecret);
-                        // Simple deterministic ordering
-                        List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(kp.getPublic().getEncoded()), ByteBuffer.wrap(viewModel.getOtherPk()));
-                        Collections.sort(keys);
-                        hash.update(keys.get(0));
-                        hash.update(keys.get(1));
-                        derivedKey = hash.digest();
-                        ourId = new UUID(Crypto.md5(kp.getPublic().getEncoded()));
-                        otherId = new UUID(Crypto.md5(viewModel.getOtherPk()));
-                        ByteBuf ack = Unpooled.buffer();
-                        ack.writeInt(Ctrl.CALL_ACK.ordinal());
-                        activity.write(Network.readAllBytes(ack), viewModel.getContact().uuid);
-                        viewModel.setStatus(TalkingViewModel.Status.TALKING);
-                        return;
-                    } catch (NoSuchAlgorithmException e) {
-                        e.printStackTrace();
-                        exit(0);
-                    } catch (InvalidKeyException | InvalidKeySpecException e) {
-                        UI.makeSnackBar(TalkingFragment.this.getView(), TalkingFragment.this.getString(R.string.pair_failed));
-                        navController.navigate(R.id.nav_home);
-                        return;
-                    }
-                    break;
+                switch (status){
+                    case CALLING:
+                        setCalling();
+                        break;
+                    case REJECTED:
+                        UI.makeSnackBar(root,getString(R.string.call_refused));
+                        backHome();
+                        break;
+                    case INCOMING:
+                        setIncoming(service.getContact());
+                        break;
+                    case TALKING:
+                        textStatus.setText(R.string.talking);
+                        break;
                 }
-
-            }
-        };
-        viewModel.getLiveStatus().observe(getViewLifecycleOwner(), statusObserver);
-
-        switch (viewModel.getStatus()){
-            case CALLING:{ try {
-                KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
-                kpg.initialize(256);
-                kp = kpg.generateKeyPair();
-                byte[] ourPk = kp.getPublic().getEncoded();
-                ByteBuf buf = Unpooled.buffer();
-                buf.writeInt(Ctrl.CALL.ordinal());
-                Network.writeBytes(buf,ourPk);
-                Signature s = Signature.getInstance("SHA256withECDSA");
-                KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-                keyStore.load(null);
-                if (keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) {
-                    s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
-                    s.update(ourPk);
-                    byte[] sign = s.sign();
-                    viewModel.setOurPk(ourPk);
-                    Network.writeBytes(buf,sign);
-                    Runnable r = new Runnable() {
-                        @Override
-                        public void run() {
-                            if (viewModel.getStatus()!= TalkingViewModel.Status.CALLING) return;
-                            activity.write(Network.readAllBytes(buf), contact.uuid);
-                            uiHandler.postDelayed(this, 1000);
-                        }
-                    };
-                    uiHandler.post(r);
-                    textStatus.setText(R.string.calling);
-
-                } else {
-                    UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-                    navController.navigate(R.id.nav_home);
-                }
-            } catch (SignatureException | UnrecoverableEntryException | CertificateException | InvalidKeyException | KeyStoreException | IOException e) {
-                UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-                Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-                exit(0);
-            }
-            break;
-            }
-            case INVOKING:
-                textStatus.setText(String.format(getString(R.string.incoming_call_with_format), contact.alias, Crypto.to64(contact.uuid.getBytes()), Crypto.bytesToHex(contact.pkSHA256(),":")));
-                root.findViewById(R.id.layout_incoming_action).setVisibility(View.VISIBLE);
-                Runnable r = new Runnable() {
-                    @Override
-                    public void run() {
-                        if(viewModel.getStatus()== TalkingViewModel.Status.INCOMING)
-                            navController.navigate(R.id.nav_home);
-                        else if(viewModel.getStatus()== TalkingViewModel.Status.INVOKING) {
-                            viewModel.setStatus(TalkingViewModel.Status.INCOMING);
-                            uiHandler.postDelayed(this,2500);
-                        }
-                    }
-                };
-                uiHandler.post(r);
-                break;
-        }
-        root.findViewById(R.id.button_reject_call).setOnClickListener(v -> {
-            ByteBuf buf = Unpooled.buffer();
-            buf.writeInt(Ctrl.CALL_REJECT.ordinal());
-            activity.write(Network.readAllBytes(buf),contact.uuid);
-            navController.navigate(R.id.nav_home);
-        });
-        root.findViewById(R.id.button_accept_call).setOnClickListener(v -> {try {
-            KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
-            kpg.initialize(256);
-            KeyPair kp = kpg.generateKeyPair();
-            byte[] ourPk = kp.getPublic().getEncoded();
-            ByteBuf buf = Unpooled.buffer();
-            buf.writeInt(Ctrl.CALL_RESPONSE.ordinal());
-            Network.writeBytes(buf, ourPk);
-            Signature s = Signature.getInstance("SHA256withECDSA");
-            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            if (keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) {
-                PrivateKey privateKey = ((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey();
-                KeyAgreement ka = KeyAgreement.getInstance("ECDH");
-                ka.init(kp.getPrivate());
-                ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(viewModel.getOtherPk())), true);
-                byte[] sharedSecret = ka.generateSecret();
-                MessageDigest hash = MessageDigest.getInstance("SHA-256");
-                hash.update(sharedSecret);
-                // Simple deterministic ordering
-                List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(ourPk), ByteBuffer.wrap(viewModel.getOtherPk()));
-                Collections.sort(keys);
-                hash.update(keys.get(0));
-                hash.update(keys.get(1));
-                derivedKey = hash.digest();
-                ourId = new UUID(Crypto.md5(ourPk));
-                otherId = new UUID(Crypto.md5(viewModel.getOtherPk()));
-                s.initSign(privateKey);
-                s.update(ourPk);
-                byte[] sign = s.sign();
-                Network.writeBytes(buf, sign);
-                Network.writeBytes(buf, viewModel.getOtherPk());
-                viewModel.setStatus(TalkingViewModel.Status.ACCEPT_CALL);
-                v.setClickable(false);
-                uiHandler.postDelayed(() -> {
-                    if (viewModel.getStatus() == TalkingViewModel.Status.ACCEPT_CALL) {
-                        UI.makeSnackBar(root, getString(R.string.call_interrupted));
-                        navController.navigate(R.id.nav_home);
-                    }
-                }, 2500);
-                activity.write(Network.readAllBytes(buf),contact.uuid);
-            } else {
-                UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-                navController.navigate(R.id.nav_home);
-            }
-        }catch (InvalidKeyException | UnrecoverableEntryException | KeyStoreException | CertificateException | SignatureException | InvalidKeySpecException | IOException e) {
-            UI.makeSnackBar(getView(), getString(R.string.pair_failed));
-            navController.navigate(R.id.nav_home);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            exit(0);
-        }
-        });*/
-        buttonCut = root.findViewById(R.id.button_cut);
-        buttonCut.setOnClickListener(v -> onCut());
-        buttonSwitch = root.findViewById(R.id.button_switch);
-        buttonSwitch.setOnClickListener(v -> {
-            if(outState==OutState.EARPHONE){
-                buttonSwitch.setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.fine_color)));
-                outState=OutState.STEREO;
-                voip.setOutDevice(mStereo);
-            }
-            else{
-                buttonSwitch.setImageTintList(ColorStateList.valueOf(getResources().getColor(R.color.black)));
-                outState=OutState.EARPHONE;
-                voip.setOutDevice(mEarphone);
             }
         });
         return root;
     }
+
+    private void backHome() {
+        navController.navigate(R.id.nav_home);
+    }
+
     @Override
     public void onStop() {
         super.onStop();
-        ImageButton compass = requireActivity().findViewById(R.id.button_compass);
+        ImageButton compass = activity.findViewById(R.id.button_compass);
         compass.setVisibility(View.GONE);
         compass.setClickable(true);
     }
@@ -306,7 +97,7 @@ public class TalkingFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        ImageButton compass = requireActivity().findViewById(R.id.button_compass);
+        ImageButton compass = activity.findViewById(R.id.button_compass);
         compass.setVisibility(View.VISIBLE);
         compass.setClickable(false);
     }
@@ -314,42 +105,24 @@ public class TalkingFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        viewModel.setStatus(TalkingViewModel.Status.DEAD);
-        viewModel.getLiveStatus().removeObserver(statusObserver);
     }
 
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
     }
-    public void onCut(){
-        activity.unbindService(conn);
-        buttonCut.setClickable(false);
-        Navigation.findNavController(requireActivity(), R.id.nav_host_fragment).navigate(R.id.nav_home);
+
+    private void resetVisibility(){
+        layoutIncoming.setVisibility(View.GONE);
+        layoutTalking.setVisibility(View.GONE);
     }
-    private AudioDeviceInfo mEarphone;
-    private AudioDeviceInfo mStereo;
-    private boolean mSelectable;
-    private enum OutState{
-        EARPHONE,STEREO
+    private void setCalling(){
+        resetVisibility();
+        textStatus.setText(R.string.calling);
     }
-    private OutState outState;
-    public void passDevice(AudioDeviceInfo earphone,AudioDeviceInfo stereo){
-        mEarphone = earphone;
-        mStereo = stereo;
-        if(!mSelectable){
-            buttonSwitch.setVisibility(View.VISIBLE);
-            mSelectable=true;
-            if(outState==OutState.EARPHONE)
-                voip.setOutDevice(earphone);
-            else
-                voip.setOutDevice(mStereo);
-        }
-    }
-    public void disableSelect(){
-        if(mSelectable){
-            buttonSwitch.setVisibility(View.GONE);
-            mSelectable = false;
-        }
+    private void setIncoming(Contact contact){
+        resetVisibility();
+        textStatus.setText(String.format(getString(R.string.incoming_call_with_format),contact.alias,Crypto.to64(contact.uuid.getBytes()),Crypto.bytesToHex(contact.pkSHA256(),":")));
+        layoutIncoming.setVisibility(View.VISIBLE);
     }
 }

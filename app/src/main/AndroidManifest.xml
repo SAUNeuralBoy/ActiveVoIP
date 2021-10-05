@@ -17,10 +17,6 @@
             android:name=".VoIPService"
             android:enabled="true"
             android:exported="false"></service>
-        <service
-            android:name=".TalkingService"
-            android:enabled="true"
-            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
