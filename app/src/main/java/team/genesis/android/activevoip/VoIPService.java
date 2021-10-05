@@ -206,12 +206,12 @@ public class VoIPService extends Service {
                 }
                 if(device!=null&&!Objects.equals(lastDevice[0], device)) {
                     audioTrack.setPreferredDevice(device);
-                    fragment.disableSelect();
+                    fragment.disableSelect();/*
                     if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&!audioManager.isBluetoothScoOn()){
                         audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                         audioManager.startBluetoothSco();
                         audioManager.setBluetoothScoOn(true);
-                    }
+                    }*/
                     lastDevice[0] = device;
                 }
                 else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
