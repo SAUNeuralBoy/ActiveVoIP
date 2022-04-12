@@ -40,6 +40,9 @@ public class SPManager {
         editor.commit();
         mService.update();
     }
+    public void commitSilent(){
+        editor.commit();
+    }
     public UUID getUUID(){
         String id64 = getUUID64();
         if(id64.equals("")) return null;
@@ -49,7 +52,7 @@ public class SPManager {
         String id64 = sp.getString(keyUUID,"");
         if(id64.equals("")){
             setUUID(Crypto.randomUUID());
-            commit();
+            commitSilent();
         }
         return sp.getString(keyUUID,"");
     }
@@ -69,7 +72,7 @@ public class SPManager {
         int port = sp.getInt(keyPort,-1);
         if(port==-1){
             setPort(10113);
-            commit();
+            commitSilent();
             return 10113;
         }
         return port;
