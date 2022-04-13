@@ -125,6 +125,7 @@ public class VoIPService extends Service {
         }
         public void push(Contact contact){
             //setStat(Status.INCOMING);
+            if(talk!=null&&contact.uuid.equals(talk.contact.uuid))  return;
             contact.invoke = System.currentTimeMillis();
             uiHandler.postDelayed(() -> {
                 Contact t = ContactDB.getContactOrDelete(dao,contact.uuid);
@@ -137,9 +138,12 @@ public class VoIPService extends Service {
             if(talk!=null)  return null;
             return newTalk(contact,true);
         }
-        public void reject(Contact contact){
+        public void markRead(Contact contact){
             contact.otherPkt = null;
             updateContact(contact);
+        }
+        public void reject(Contact contact){
+            markRead(contact);
         }
         public byte[] call(Contact contact){
             if(talk!=null)   return null;
@@ -165,6 +169,7 @@ public class VoIPService extends Service {
                     new SecretKeySpec(performECDH(talk.getKeyPair(),otherPkt),"AES"),sp.getHostname(),sp.getPort(),
                     (AudioManager) getSystemService(Context.AUDIO_SERVICE),VoIPService.this);
             talker.startTalking();
+            markRead(talk.getContact());
         }
         public boolean isIncoming(){
             if(talk==null)  return false;
@@ -460,7 +465,7 @@ public class VoIPService extends Service {
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                if(dispatcher.isOutgoing(contact.uuid))
+                if(!(dispatcher.isOutgoing(contact.uuid)&&dispatcher.talker==null))    return;
                 write(pkt, contact.uuid);
                 uiHandler.postDelayed(this, 1000);
             }
