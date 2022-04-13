@@ -163,7 +163,7 @@ public class VoIPService extends Service {
             talker = new Talker(new UUID(Crypto.md5(talk.getKeyPair().getPublic().getEncoded())),
                     new UUID(Crypto.md5(otherPkt)),
                     new SecretKeySpec(performECDH(talk.getKeyPair(),otherPkt),"AES"),sp.getHostname(),sp.getPort(),
-                    (AudioManager) getSystemService(Context.AUDIO_SERVICE));
+                    (AudioManager) getSystemService(Context.AUDIO_SERVICE),VoIPService.this);
             talker.startTalking();
         }
         public boolean isIncoming(){
@@ -183,7 +183,7 @@ public class VoIPService extends Service {
         }
         public void cancelCall(){
             talk = null;
-            mActivity.unlock();
+            uiHandler.post(()->mActivity.unlock());
         }
 
         public Dispatcher() {
@@ -531,5 +531,8 @@ public class VoIPService extends Service {
             return false;
         }
         return true;
+    }
+    public void cut(){
+        dispatcher.cut();
     }
 }

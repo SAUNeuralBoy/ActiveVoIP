@@ -31,6 +31,7 @@ import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.Crypto;
 import team.genesis.android.activevoip.Network;
 import team.genesis.android.activevoip.UI;
+import team.genesis.android.activevoip.VoIPService;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.data.UUID;
@@ -53,8 +54,9 @@ public class Talker {
 
     private AudioTrack audioTrack;
     private final AudioManager audioManager;
+    private final VoIPService mService;
 
-    public Talker(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, AudioManager audioManager){
+    public Talker(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, AudioManager audioManager, VoIPService service){
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding",cipherEncrypt.getProvider());
@@ -65,6 +67,7 @@ public class Talker {
         this.otherId = otherId;
         this.secretKey = secretKey;
         this.audioManager = audioManager;
+        this.mService = service;
         try {
             tunnel = new ClientTunnel("voip",hostName,port,ourId);
         } catch (SocketException e) {
@@ -120,7 +123,7 @@ public class Talker {
                     incoming.add(req.data);
                     break;
                 case TALK_CUT:
-                    cut();
+                    mService.cut();
             }
         });
         Runnable play = () -> {
