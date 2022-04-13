@@ -1,7 +1,6 @@
 package team.genesis.android.activevoip.ui.home;
 
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,8 +9,6 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.lifecycle.ViewModelProvider;
-import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.List;
@@ -24,8 +21,6 @@ import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.db.ContactDB;
 import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.db.ContactEntity;
-import team.genesis.android.activevoip.ui.MainViewModel;
-import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.data.UUID;
 
 public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHolder> {
@@ -81,6 +76,18 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             if(contact==null)   return;
             mActivity.getService().startCalling(contact);
         });
+        holder.buttonAcceptCall.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(contact==null)   return;
+            mActivity.getService().acceptCall(contact);
+        });
+        holder.buttonRejectCall.setOnClickListener(v -> {
+            ContactDao dao = mActivity.getDao();
+            Contact contact = ContactDB.getContactOrDelete(dao,new UUID(Crypto.from64(holder.contactUUID.getText().toString())));
+            if(contact==null)   return;
+            mActivity.getService().reject(contact);
+        });
         return holder;
     }
 
@@ -92,6 +99,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         } catch (Crypto.DecryptException e) {
             return;
         }
+
         holder.contactAlias.setText(contact.alias);
         holder.contactUUID.setText(Crypto.to64(contact.uuid.getBytes()));
         holder.setDefaultVisibility();
@@ -114,6 +122,16 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
                 holder.buttonRetry.setVisibility(View.VISIBLE);
                 holder.contactFingerPrint.setVisibility(View.GONE);
                 break;
+        }
+        if(contact.otherPkt!=null){
+            if(contact.invoke>System.currentTimeMillis()-1000) {
+                holder.layoutIncoming.setVisibility(View.VISIBLE);
+                holder.buttonCall.setVisibility(View.GONE);
+            }
+            else{
+                holder.contactStatus.setVisibility(View.VISIBLE);
+                holder.contactStatus.setText(R.string.missed_call);
+            }
         }
         if(mEditable){
             holder.setDefaultVisibility();
@@ -152,6 +170,9 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         ImageButton buttonReject;
         ImageButton buttonEdit;
         ImageButton buttonDelete;
+        ImageButton buttonAcceptCall;
+        ImageButton buttonRejectCall;
+        View layoutIncoming;
 
         public ViewHolder (View view)
         {
@@ -166,6 +187,9 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             buttonReject = view.findViewById(R.id.button_pair_reject);
             buttonEdit = view.findViewById(R.id.button_edit_contact);
             buttonDelete = view.findViewById(R.id.button_delete_contact);
+            buttonAcceptCall = view.findViewById(R.id.button_accept_call);
+            buttonRejectCall = view.findViewById(R.id.button_reject_call);
+            layoutIncoming = view.findViewById(R.id.layout_incoming);
         }
         public void setDefaultVisibility(){
             contactFingerPrint.setVisibility(View.VISIBLE);
@@ -176,6 +200,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             buttonCall.setVisibility(View.GONE);
             buttonEdit.setVisibility(View.GONE);
             buttonDelete.setVisibility(View.GONE);
+            layoutIncoming.setVisibility(View.GONE);
         }
 
 

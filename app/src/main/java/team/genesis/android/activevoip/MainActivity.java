@@ -2,20 +2,16 @@ package team.genesis.android.activevoip;
 
 import android.Manifest;
 import android.app.ActivityManager;
-import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyProperties;
 import android.view.Menu;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
@@ -27,7 +23,6 @@ import com.google.android.material.navigation.NavigationView;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -36,52 +31,13 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.room.Room;
 
-import java.io.IOException;
-import java.lang.reflect.Array;
-import java.net.InetAddress;
-import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Signature;
-import java.security.SignatureException;
-import java.security.cert.CertificateException;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
 
-import javax.crypto.spec.SecretKeySpec;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import team.genesis.android.activevoip.data.Contact;
-import team.genesis.android.activevoip.db.ContactDB;
 import team.genesis.android.activevoip.db.ContactDao;
-import team.genesis.android.activevoip.db.ContactEntity;
-import team.genesis.android.activevoip.network.ClientTunnel;
-import team.genesis.android.activevoip.network.Ctrl;
 import team.genesis.android.activevoip.ui.MainViewModel;
-import team.genesis.android.activevoip.ui.talking.TalkingFragment;
-import team.genesis.android.activevoip.ui.talking.TalkingViewModel;
 import team.genesis.data.UUID;
-import team.genesis.network.DNSLookupThread;
-import team.genesis.tunnels.ActiveDatagramTunnel;
-import team.genesis.tunnels.UDPActiveDatagramTunnel;
-import team.genesis.tunnels.active.datagram.udp.UDPProbe;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static java.lang.System.exit;
@@ -93,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private AppBarConfiguration mAppBarConfiguration;
 
     private MainViewModel viewModel;
-    private TalkingViewModel talkingViewModel;
+    //private TalkingViewModel talkingViewModel;
     private VoIPService service;
     private ServiceConnection conn;
 
@@ -123,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
                         uiHandler.post(()->viewModel.getCompassColor().setValue(color));
                 });
                 uiHandler.post(() -> {
-                    talkingViewModel = new ViewModelProvider(MainActivity.this).get(TalkingViewModel.class);
+                    //talkingViewModel = new ViewModelProvider(MainActivity.this).get(TalkingViewModel.class);
                     setContentView(R.layout.activity_main);
                     Toolbar toolbar = findViewById(R.id.toolbar);
                     setSupportActionBar(toolbar);
@@ -195,11 +151,13 @@ public class MainActivity extends AppCompatActivity {
                         popup.inflate(R.menu.add);
                         popup.show();
                     });
-                    service.getLiveStat().observe(MainActivity.this, status -> {
-                        if(status== VoIPService.Status.READY)   return;
-                        navController.navigate(R.id.nav_talking);
-                        if(!(Objects.requireNonNull(getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment)).getChildFragmentManager().getPrimaryNavigationFragment() instanceof TalkingFragment))
-                            navController.navigate(R.id.nav_talking);
+                    findViewById(R.id.button_cut).setOnClickListener(v -> {
+                        if(service.cuR != null) {
+                            service.reset();
+                            unlock();
+                        }
+                        if(service.getTalker()!=null)
+                            service.getTalker().cut();
                     });
                 });
             }
@@ -270,5 +228,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         unbindService(conn);
+    }
+    public void lock(){
+        findViewById(R.id.button_cut).setVisibility(View.VISIBLE);
+        findViewById(R.id.list_contact).setClickable(false);
+    }
+    public void unlock(){
+        findViewById(R.id.button_cut).setVisibility(View.GONE);
+        findViewById(R.id.list_contact).setClickable(true);
     }
 }

@@ -69,6 +69,34 @@
         android:visibility="visible"
         app:srcCompat="@android:drawable/ic_menu_call" />
 
+    <LinearLayout
+        android:id="@+id/layout_incoming"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/button_accept_call"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:background="#00000000"
+            android:visibility="visible"
+            app:srcCompat="@android:drawable/ic_menu_call"
+            app:tint="#00FF00" />
+
+        <ImageButton
+            android:id="@+id/button_reject_call"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:background="#00000000"
+            android:visibility="visible"
+            app:srcCompat="@android:drawable/ic_menu_call"
+            app:tint="#FF0000" />
+    </LinearLayout>
+
     <ImageButton
         android:id="@+id/button_edit_contact"
         android:layout_width="wrap_content"

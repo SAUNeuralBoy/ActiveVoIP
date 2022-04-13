@@ -23,6 +23,8 @@ public class Contact {
     }
     public byte[] ourPk;
     public byte[] otherPk;
+    public byte[] otherPkt;
+    public long invoke;
     public Contact(){
         alias = "";
     }

@@ -133,6 +133,7 @@ public class Talker {
                 if(incoming.size()>25)  incoming.clear();
             }
         };
+        /*
         final AudioDeviceInfo[] lastDevice = {null};
         Runnable detect = new Runnable() {
             @Override
@@ -167,7 +168,7 @@ public class Talker {
             }
         };
         uiHandler.post(detect);
-
+*/
         new Thread(() -> {
             while (isRecording) {
                 asyncHandler.post(encode);

@@ -47,4 +47,5 @@
     <string name="call_refused">呼叫被拒接</string>
     <string name="call_interrupted">呼叫意外中断</string>
     <string name="talking">通话中…</string>
+    <string name="missed_call">未接来电</string>
 </resources>

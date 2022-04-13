@@ -30,4 +30,7 @@ public class ContactEntity {
     public Contact getContact() throws Crypto.DecryptException {
         return new Gson().fromJson(new String(Crypto.decryptWithMasterKey(encryptedData)),Contact.class);
     }
+    public long getTimeStamp(){
+        return timeStamp;
+    }
 }
