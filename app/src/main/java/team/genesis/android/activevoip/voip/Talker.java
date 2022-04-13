@@ -113,9 +113,10 @@ public class Talker {
             } catch (Crypto.DecryptException e) {
                 return;
             }
-            if (req==null||req.data==null)  return;
+            if (req==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
+                    if(req.data==null)  return;
                     incoming.add(req.data);
                     break;
                 case TALK_CUT:
@@ -195,6 +196,13 @@ public class Talker {
     }
     }
     public Talker.Request parse(byte[] pack) throws IndexOutOfBoundsException, Crypto.DecryptException {
+        if(pack.length==4){
+            Talker.Request req = new Talker.Request();
+            ByteBuf buf = Unpooled.copiedBuffer(pack);
+            req.ctrl = Ctrl.values()[buf.readInt()];
+            req.data = null;
+            return req;
+        }
         if(pack.length<=4+16)  throw new IndexOutOfBoundsException();
         Talker.Request req = new Talker.Request();
         ByteBuf buf = Unpooled.copiedBuffer(pack);

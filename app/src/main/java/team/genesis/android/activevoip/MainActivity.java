@@ -151,14 +151,7 @@ public class MainActivity extends AppCompatActivity {
                         popup.inflate(R.menu.add);
                         popup.show();
                     });
-                    findViewById(R.id.button_cut).setOnClickListener(v -> {
-                        if(service.cuR != null) {
-                            service.reset();
-                            unlock();
-                        }
-                        if(service.getTalker()!=null)
-                            service.getTalker().cut();
-                    });
+                    findViewById(R.id.button_cut).setOnClickListener(v -> service.getDispatcher().cut());
                 });
             }
 

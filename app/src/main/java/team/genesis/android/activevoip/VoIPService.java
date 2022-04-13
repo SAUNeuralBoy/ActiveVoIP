@@ -14,7 +14,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.view.View;
 
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.MutableLiveData;
@@ -66,19 +65,17 @@ public class VoIPService extends Service {
 
     private MainActivity mActivity;
     private Handler uiHandler;
-    //private KeyPair kp;
     private KeyStore keyStore;
     private Signature s;
-    private byte[] derivedKey;
-    //private UUID ourId;
-    //private UUID otherId;
-    private static class TalkDispatcher{
-        private final Contact contact;
-        private final KeyPair kp;
+    private static class Talk{
+        Contact contact;
+        KeyPair keyPair;
+        boolean incoming;
 
-        public TalkDispatcher(Contact contact, KeyPair kp) {
+        public Talk(Contact contact, KeyPair keyPair, boolean incoming) {
             this.contact = contact;
-            this.kp = kp;
+            this.keyPair = keyPair;
+            this.incoming = incoming;
         }
 
         public Contact getContact() {
@@ -86,20 +83,120 @@ public class VoIPService extends Service {
         }
 
         public KeyPair getKeyPair() {
-            return kp;
+            return keyPair;
+        }
+
+        public boolean isIncoming() {
+            return incoming;
         }
     }
-    private static class IncomingDispatcher extends TalkDispatcher{
-        public IncomingDispatcher(Contact contact, KeyPair kp) {
-            super(contact, kp);
+    public class Dispatcher{
+        private Talk talk;
+        private Talker talker;
+        private byte[] newTalk(Contact contact,boolean incoming){try {
+            mActivity.lock();
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
+            kpg.initialize(256);
+            talk = new Talk(contact,kpg.generateKeyPair(),incoming);
+            return talk.getKeyPair().getPublic().getEncoded();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            exit(0);
+            return null;
+        }
+        }
+        private byte[] performECDH(KeyPair kp,byte[] otherPkt) {try {
+            KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+            ka.init(kp.getPrivate());
+            ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(otherPkt)), true);
+            byte[] sharedSecret = ka.generateSecret();
+            MessageDigest hash = MessageDigest.getInstance("SHA-256");
+            hash.update(sharedSecret);
+            List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(kp.getPublic().getEncoded()), ByteBuffer.wrap(otherPkt));
+            Collections.sort(keys);
+            hash.update(keys.get(0));
+            hash.update(keys.get(1));
+            return hash.digest();
+        }catch (NoSuchAlgorithmException | InvalidKeyException | InvalidKeySpecException e) {
+            e.printStackTrace();
+            exit(0);
+        }
+            return null;
+        }
+        public void push(Contact contact){
+            //setStat(Status.INCOMING);
+            contact.invoke = System.currentTimeMillis();
+            uiHandler.postDelayed(() -> {
+                Contact t = ContactDB.getContactOrDelete(dao,contact.uuid);
+                if(t ==null)   return;
+                updateContact(t);
+            }, 1500);
+            updateContact(contact);
+        }
+        public byte[] accept(Contact contact){
+            if(talk!=null)  return null;
+            return newTalk(contact,true);
+        }
+        public void reject(Contact contact){
+            contact.otherPkt = null;
+            updateContact(contact);
+        }
+        public byte[] call(Contact contact){
+            if(talk!=null)   return null;
+            return newTalk(contact,false);
+        }
+        public void onRejected(UUID uuid){
+            if(!isOutgoing(uuid))   return;
+            cancelCall();
+        }
+        public boolean onAccepted(Contact contact, byte[] msg){
+            if(!isOutgoing(contact.uuid))   return false;
+            startTalking(contact.uuid,msg);
+            return true;
+        }
+        public void startTalkingIfAccepted(UUID uuid){
+            startTalking(uuid,talk.getContact().otherPkt);
+        }
+        public void startTalking(UUID uuid,byte[] otherPkt){
+            if(talk==null)  return;
+            if(!talk.getContact().uuid.equals(uuid))    return;
+            talker = new Talker(new UUID(Crypto.md5(talk.getKeyPair().getPublic().getEncoded())),
+                    new UUID(Crypto.md5(otherPkt)),
+                    new SecretKeySpec(performECDH(talk.getKeyPair(),otherPkt),"AES"),sp.getHostname(),sp.getPort(),
+                    (AudioManager) getSystemService(Context.AUDIO_SERVICE));
+            talker.startTalking();
+        }
+        public boolean isIncoming(){
+            if(talk==null)  return false;
+            return talk.isIncoming();
+        }
+        public boolean isOutgoing(UUID uuid){
+            if(talk==null||talk.isIncoming())  return false;
+            return talk.getContact().uuid.equals(uuid);
+        }
+        public void cut(){
+            if(talker!=null){
+                talker.cut();
+                talker=null;
+            }
+            cancelCall();
+        }
+        public void cancelCall(){
+            talk = null;
+            mActivity.unlock();
+        }
+
+        public Dispatcher() {
+            talk = null;
+            talker = null;
         }
     }
-    public static class OutgoingDispatcher extends TalkDispatcher{
-        public OutgoingDispatcher(Contact contact, KeyPair kp) {
-            super(contact, kp);
-        }
+
+    public Dispatcher getDispatcher() {
+        return dispatcher;
     }
-    TalkDispatcher cuR;
+
+    private Dispatcher dispatcher;
     public VoIPService() {
         mActivity = null;
     }
@@ -159,7 +256,7 @@ public class VoIPService extends Service {
             exit(0);
         }
         //mStat = new MutableLiveData<>(Status.READY);
-        reset();
+        //reset();
         dao = Room.databaseBuilder(this, ContactDB.class, "ContactEntity").allowMainThreadQueries().build().getDao();
         sp = SPManager.getManager(this);
         try {
@@ -170,6 +267,7 @@ public class VoIPService extends Service {
             return;
         }
         //countDown = null;
+        dispatcher = new Dispatcher();
         uiHandler = new Handler();
         tunnel.setRecvListener(msg-> uiHandler.post(()->{try {
             ByteBuf buf = Unpooled.copiedBuffer(msg.data);
@@ -239,40 +337,26 @@ public class VoIPService extends Service {
                 case CALL:{
                     Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
                     if(contact==null)   return;
-                    //mContact = contact;
-
                     s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));
-                    contact.otherPkt = Network.readNbytes(buf,500);
-                    s.update(contact.otherPkt);
+                    byte[] otherPkt = Network.readNbytes(buf,500);
+                    s.update(otherPkt);
                     byte[] sign = Network.readNbytes(buf,500);
                     if(!s.verify(sign)){
                         alert();
-                        reset();
+                        //reset();
                         return;
                     }
-                    //setStat(Status.INCOMING);
-                    contact.invoke = System.currentTimeMillis();
-                    uiHandler.postDelayed(() -> {
-                        Contact t = ContactDB.getContactOrDelete(dao,msg.src);
-                        if(t ==null)   return;
-                        updateContact(t);
-                    }, 1500);
-                    updateContact(contact);
+                    contact.otherPkt = otherPkt;
+                    dispatcher.push(contact);
                     break;
                 }
                 case CALL_REJECT:{
-                    if(!(cuR instanceof OutgoingDispatcher))    return;
-                    if(!msg.src.equals(cuR.getContact().uuid))  return;//if(getStat()!=Status.CALLING)  return;
-                    //if(!msg.src.equals(mContact.uuid))    return;
-                    //setStat(Status.REJECTED);
+                    dispatcher.onRejected(msg.src);
                     break;
                 }
                 case CALL_RESPONSE:{
-                    if(!(cuR instanceof OutgoingDispatcher))    return;
-                    Contact contact = cuR.getContact();
-                    if(!msg.src.equals(contact.uuid))  return;
-                    //if(!mContact.uuid.equals(msg.src))  return;
-
+                    Contact contact = ContactDB.getContactOrDelete(dao,msg.src);
+                    if(contact==null)   return;
                     s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(contact.otherPk)));//s.initVerify(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(mContact.otherPk)));
                     byte[] otherPkt = Network.readNbytes(buf,500);
                     s.update(otherPkt);
@@ -281,21 +365,15 @@ public class VoIPService extends Service {
                         alert();
                         return;
                     }
-                    if(!Arrays.equals(cuR.getKeyPair().getPublic().getEncoded(),Network.readNbytes(buf,500))) return;
-                    performECDH(otherPkt,cuR.getKeyPair());
-                    ByteBuf ack = Unpooled.buffer();
-                    ack.writeInt(Ctrl.CALL_ACK.ordinal());
-                    write(Network.readAllBytes(ack), msg.src);
-                    startTalking(new UUID(Crypto.md5(cuR.getKeyPair().getPublic().getEncoded())),new UUID(contact.otherPkt),derivedKey);
+                    if(dispatcher.onAccepted(contact,otherPkt)) {
+                        ByteBuf ack = Unpooled.buffer();
+                        ack.writeInt(Ctrl.CALL_ACK.ordinal());
+                        write(Network.readAllBytes(ack), msg.src);
+                    }
                     break;
                 }
                 case CALL_ACK:{
-                    if(!(cuR instanceof IncomingDispatcher))    return;
-                    Contact contact = cuR.getContact();
-                    if(!msg.src.equals(contact.uuid))  return;
-                    //if(contact.status!= Contact.Status.CALLER)  return;//if(getStat()!=Status.WAITING)   return;
-                    //if(!mContact.uuid.equals(msg.src))    return;
-                    startTalking(new UUID(Crypto.md5(cuR.getKeyPair().getPublic().getEncoded())),new UUID(contact.otherPkt),derivedKey);
+                    dispatcher.startTalkingIfAccepted(msg.src);
                     break;
                 }
             }
@@ -354,26 +432,7 @@ public class VoIPService extends Service {
         uiHandler.post(()->probeResult.setValue(result));
     }
 
-    private void performECDH(byte[] otherPkt,KeyPair kp) {try {
-        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
-        ka.init(kp.getPrivate());
-        ka.doPhase(KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC).generatePublic(new X509EncodedKeySpec(otherPkt)), true);
-        byte[] sharedSecret = ka.generateSecret();
-        MessageDigest hash = MessageDigest.getInstance("SHA-256");
-        hash.update(sharedSecret);
-        // Simple deterministic ordering
-        List<ByteBuffer> keys = Arrays.asList(ByteBuffer.wrap(kp.getPublic().getEncoded()), ByteBuffer.wrap(otherPkt));
-        Collections.sort(keys);
-        hash.update(keys.get(0));
-        hash.update(keys.get(1));
-        derivedKey = hash.digest();
-        //ourId = new UUID(Crypto.md5(kp.getPublic().getEncoded()));
-        //otherId = new UUID(Crypto.md5(otherPkt));
-    }catch (NoSuchAlgorithmException | InvalidKeyException | InvalidKeySpecException e) {
-        e.printStackTrace();
-        exit(0);
-    }
-    }
+
 
     private ContactDao dao;
     private SPManager sp;
@@ -391,58 +450,23 @@ public class VoIPService extends Service {
 
 
     public void startCalling(Contact contact){
-        if(cuR!=null)   return;
-        mActivity.lock();
-
+        byte[] ourPk = dispatcher.call(contact);
+        if(ourPk==null) return;
         ByteBuf buf = Unpooled.buffer();
-
-        byte[] signed = newTalk(contact);
-        if (signed==null){
-            reset();
-            return;//
-        }
-        cuR = new OutgoingDispatcher(cuR.getContact(),cuR.getKeyPair());
-
-        buf.writeBytes(signed);
-        //setStat(Status.CALLING);
+        buf.writeInt(Ctrl.CALL.ordinal());
+        Network.writeBytes(buf,ourPk);
+        sign(ourPk,contact,buf);
+        byte[] pkt = Network.readAllBytes(buf);
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                if(!(cuR instanceof OutgoingDispatcher))    return;//if (getStat()!=Status.CALLING) return;
-                write(Network.readAllBytes(buf), contact.uuid);
+                if(dispatcher.isOutgoing(contact.uuid))
+                write(pkt, contact.uuid);
                 uiHandler.postDelayed(this, 1000);
             }
         };
         uiHandler.post(r);
     }
-
-    private byte[] newTalk(Contact contact){try {
-        ByteBuf buf = Unpooled.buffer();
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
-        kpg.initialize(256);
-        cuR = new TalkDispatcher(contact,kpg.generateKeyPair());
-        byte[] ourPk = cuR.getKeyPair().getPublic().getEncoded();
-        buf.writeInt(Ctrl.CALL.ordinal());
-        Network.writeBytes(buf, ourPk);
-
-        if (!keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) return null;
-        s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
-        s.update(ourPk);
-        byte[] sign = s.sign();
-        Network.writeBytes(buf, sign);
-        return Network.readAllBytes(buf);
-    } catch (InvalidKeyException | SignatureException | UnrecoverableEntryException | KeyStoreException e) {
-        return null;
-    } catch (NoSuchAlgorithmException e) {
-        e.printStackTrace();
-        exit(0);
-        return null;
-    }
-    }
-
-    //private Contact mContact;
-
-
     public void createPair(Contact contact){
         ByteBuf buf = Unpooled.buffer();
         buf.writeInt(Ctrl.PAIR.ordinal());
@@ -479,60 +503,33 @@ public class VoIPService extends Service {
         builder.setNegativeButton(R.string.remain_calm, (dialog, which) -> {});
         builder.show();
     }
-
-    public void reset(){
-        //setStat(Status.READY);
-        //mContact = null;
-        if(cuR!=null) {
-            Contact contact = cuR.getContact();
-            contact.otherPkt=null;
-            updateContact(contact);
-            cuR = null;
-        }
-        talker = null;
-        //mActivity.unlock();
-    }
     public void reject(Contact contact){
         ByteBuf buf = Unpooled.buffer();
         buf.writeInt(Ctrl.CALL_REJECT.ordinal());
         write(Network.readAllBytes(buf),contact.uuid);
-        contact.otherPkt = null;
-        updateContact(contact);
+        dispatcher.reject(contact);
     }
     public void acceptCall(Contact contact){
-        if(talker!=null)    return;//if(getStat()!=Status.INCOMING)  return;
-        mActivity.lock();
+        byte[] ourPk = dispatcher.accept(contact);
+        if(ourPk==null) return;
         ByteBuf buf = Unpooled.buffer();
-        byte[] signed = newTalk(contact);
-        if(signed==null){
-            reset();
-            return;
-        }
-        performECDH(contact.otherPkt,cuR.getKeyPair());
-        buf.writeBytes(signed);
-        Network.writeBytes(buf,contact.otherPkt);
-        //setStat(Status.WAITING);
+        buf.writeInt(Ctrl.CALL_RESPONSE.ordinal());
+        Network.writeBytes(buf,ourPk);
+        if (!sign(ourPk, contact, buf)) return;
         write(Network.readAllBytes(buf),contact.uuid);
-        contact.otherPkt=null;
-        updateContact(contact);
-    }
-    public void startTalking(UUID ourId,UUID otherId,byte[] derivedKey){
-        reset();
-        //mActivity.lock();
-        talker = new Talker(ourId,otherId,new SecretKeySpec(derivedKey,"AES"),sp.getHostname(),sp.getPort(), (AudioManager) getSystemService(Context.AUDIO_SERVICE));
-        talker.startTalking();
-        //setStat(Status.TALKING);
-    }
-    public void cut(){
-        if(talker==null)    return;
-        talker.cut();
-        talker = null;
-        mActivity.unlock();
     }
 
-    public Talker getTalker() {
-        return talker;
+    private boolean sign(byte[] data, Contact contact, ByteBuf buf) {
+        try {
+            if (!keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) return false;
+            s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
+            s.update(data);
+            byte[] sign = s.sign();
+            Network.writeBytes(buf, sign);
+        } catch (NoSuchAlgorithmException | InvalidKeyException | UnrecoverableEntryException | SignatureException | KeyStoreException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
-
-    private Talker talker;
 }
