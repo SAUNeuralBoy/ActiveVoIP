@@ -79,7 +79,7 @@ public class Talker {
         AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*32;
+        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
         audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         byte[] buf = new byte[recordBufSize];
 
@@ -119,7 +119,7 @@ public class Talker {
             if (req==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
-                    if(req.data==null)  return;
+                    if(req.data==null||req.data.length<38)  return;
                     incoming.add(req.data);
                     break;
                 case TALK_CUT:
@@ -128,13 +128,21 @@ public class Talker {
         });
         Runnable play = () -> {
             if(!isRecording)    return;
-            if(incoming.size()>1){
-                byte[] data = incoming.remove(0);
-                byte[] sample = new byte[recordBufSize];
-                int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
-                if(len<=0)  return;
-                audioTrack.write(sample,0,len,AudioTrack.WRITE_NON_BLOCKING);
-                if(incoming.size()>25)  incoming.clear();
+            byte[] data,sample;
+            sample = new byte[recordBufSize];
+            if(incoming.size()<1){
+                byte[] t = new byte[recordBufSize];
+                byte[] encoded = new byte[2048];
+                data = Arrays.copyOf(encoded,AudioCodec.audio_encode(t,0,recordBufSize,encoded,0));
+            }
+            else {
+                data = incoming.remove(0);
+                if(incoming.size()>1)  incoming.remove(0);
+            }
+            int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
+            if(len>0) {
+                //if(audioTrack.getPlayState()!=AudioTrack.PLAYSTATE_PLAYING) audioTrack.play();
+                audioTrack.write(sample, 0, len, AudioTrack.WRITE_NON_BLOCKING);
             }
         };
         /*
@@ -187,6 +195,7 @@ public class Talker {
         }).start();
     }
     private void write(Ctrl ctrl, byte[] data){try {
+        //System.out.println(data.length);
         ByteBuf buf = Unpooled.buffer();
         buf.writeInt(ctrl.ordinal());
         cipherEncrypt.init(Cipher.ENCRYPT_MODE, secretKey);
