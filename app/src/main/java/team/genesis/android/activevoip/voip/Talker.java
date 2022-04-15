@@ -17,7 +17,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -34,6 +33,11 @@ import team.genesis.android.activevoip.UI;
 import team.genesis.android.activevoip.VoIPService;
 import team.genesis.android.activevoip.network.ClientTunnel;
 import team.genesis.android.activevoip.network.Ctrl;
+import team.genesis.concentus.OpusApplication;
+import team.genesis.concentus.OpusDecoder;
+import team.genesis.concentus.OpusEncoder;
+import team.genesis.concentus.OpusException;
+import team.genesis.concentus.OpusSignal;
 import team.genesis.data.UUID;
 
 import static java.lang.System.exit;
@@ -51,6 +55,7 @@ public class Talker {
     private boolean isRecording;
     private AudioRecord audioRecord;
     private Handler asyncHandler;
+    private Handler pullHandler;
 
     private AudioTrack audioTrack;
     private final AudioManager audioManager;
@@ -75,25 +80,110 @@ public class Talker {
             exit(0);
         }
     }
+    private static abstract class Codec {
+        public abstract byte[] encode(short[] pcm,int length);
+        public abstract short[] decode(byte[] encoded);
+        public abstract short[] predict(int defaultSize);
+    }
+    private static class OpusCodec extends Codec {
+        private final OpusEncoder encoder;
+        private final OpusDecoder decoder;
+        private final byte[] buf;
+        private final short[] sbuf;
+        private byte[] last;
+        private final int frameSize;
+        public OpusCodec(int frameSize) {
+            try {
+                decoder = new OpusDecoder(SAMPLE_RATE, 1);
+                encoder = new OpusEncoder(SAMPLE_RATE, 1, OpusApplication.OPUS_APPLICATION_VOIP);
+            } catch (OpusException e) {
+                e.printStackTrace();
+                throw new RuntimeException();
+            }
+            encoder.setBitrate(24000);
+            encoder.setSignalType(OpusSignal.OPUS_SIGNAL_VOICE);
+            encoder.setComplexity(10);
+            buf = new byte[2048];
+            sbuf = new short[2048];
+            last = null;
+            this.frameSize = frameSize;
+        }
+        public byte[] encode(short[] pcm,int length){
+            try {
+                return Arrays.copyOf(buf,encoder.encode(pcm,0,frameSize, buf,0, buf.length));/*
+                System.out.println("o");
+                System.out.println(pcm.length);
+                System.out.println("t");
+                byte[] encoded = Arrays.copyOf(buf,encoder.encode(Arrays.copyOf(pcm,length),0,frameSize, buf,0, buf.length));
+                System.out.println(decode(encoded).length);
+                return encoded;*/
+            } catch (OpusException e) {
+                e.printStackTrace();
+                throw new RuntimeException();
+            }
+        }
+        public short[] _decode(byte[] encoded,boolean fec){
+            try {
+                return Arrays.copyOf(sbuf,decoder.decode(encoded,0,encoded.length,sbuf,0,frameSize,fec));
+            } catch (OpusException e) {
+                e.printStackTrace();
+                throw new RuntimeException();
+            }
+        }
+        public short[] decode(byte[] encoded){
+            last = Arrays.copyOf(encoded,encoded.length);
+            return _decode(encoded,false);
+        }
+        public short[] predict(int defaultSize){
+            //ut.println("loss");
+            if(last==null)
+                return new short[defaultSize];
+            return _decode(last,true);
+        }
+    }
+    /*
+    public static class IlbcCodec extends Codec{
+        private final byte[] buf;
+        public IlbcCodec() {
+            AudioCodec.audio_codec_init(20);
+            buf = new byte[2048];
+        }
+        public byte[] encode(byte[] pcm){
+            return Arrays.copyOf(buf,AudioCodec.audio_encode(pcm,0,pcm.length,buf,0));
+        }
+        public byte[] decode(byte[] encoded){
+            return Arrays.copyOf(buf,AudioCodec.audio_decode(encoded,0,encoded.length,buf,buf.length));
+        }
+        public byte[] predict(int defaultSize){
+            return decode(new byte[defaultSize]);
+        }
+    }*/
     public void startTalking(){
-        AudioCodec.audio_codec_init(20);
 
 
-        int recordBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING);
+
+        int recordBufSize = 8*20;//AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*2;
+        Codec codec = new OpusCodec(8*20);
         audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
-        byte[] buf = new byte[recordBufSize];
+        short[] buf = new short[recordBufSize];
 
         isRecording = true;
         audioRecord.startRecording();
         asyncHandler = UI.getCycledHandler("voip_async");
+        pullHandler = UI.getCycledHandler("voip_pull");
         Handler uiHandler = new Handler();
 
-        Runnable encode = () -> {
-            if(!isRecording)    return;
-            int len = audioRecord.read(buf,0,recordBufSize,AudioRecord.READ_NON_BLOCKING);
-            if(len<0)   return;
-            byte[] encoded = new byte[2048];
-            write(Ctrl.TALK_PACK, Arrays.copyOf(encoded,AudioCodec.audio_encode(buf,0,len,encoded,0)));
+        Runnable encode = new Runnable() {
+            @Override
+            public void run() {
+                //System.out.println(System.currentTimeMillis());
+                if (!isRecording) return;
+                int len = audioRecord.read(buf, 0, recordBufSize, AudioRecord.READ_BLOCKING);
+                //System.out.println(len);
+                if (len < 0) return;
+                Talker.this.write(Ctrl.TALK_PACK, codec.encode(buf,len));
+                pullHandler.post(this);
+            }
         };
 
         List<byte[]> incoming = Collections.synchronizedList(new LinkedList<>());
@@ -119,7 +209,7 @@ public class Talker {
             if (req==null)  return;
             switch (req.ctrl){
                 case TALK_PACK:
-                    if(req.data==null||req.data.length<38)  return;
+                    if(req.data==null||req.data.length<1)  return;
                     incoming.add(req.data);
                     break;
                 case TALK_CUT:
@@ -128,21 +218,17 @@ public class Talker {
         });
         Runnable play = () -> {
             if(!isRecording)    return;
-            byte[] data,sample;
-            sample = new byte[recordBufSize];
-            if(incoming.size()<1){
-                byte[] t = new byte[recordBufSize];
-                byte[] encoded = new byte[2048];
-                data = Arrays.copyOf(encoded,AudioCodec.audio_encode(t,0,recordBufSize,encoded,0));
-            }
+            short[] pcm;
+            if(incoming.size()<1)
+                pcm = codec.predict(recordBufSize);
             else {
-                data = incoming.remove(0);
-                if(incoming.size()>1)  incoming.remove(0);
+                pcm = codec.decode(incoming.remove(0));
+                if(incoming.size()>10)  incoming.remove(0);
             }
-            int len = AudioCodec.audio_decode(data,0,data.length,sample,0);
-            if(len>0) {
+            if(pcm.length>0) {
                 //if(audioTrack.getPlayState()!=AudioTrack.PLAYSTATE_PLAYING) audioTrack.play();
-                audioTrack.write(sample, 0, len, AudioTrack.WRITE_NON_BLOCKING);
+                System.out.println(System.currentTimeMillis());
+                audioTrack.write(pcm, 0, pcm.length, AudioTrack.WRITE_NON_BLOCKING);
             }
         };
         /*
@@ -183,8 +269,8 @@ public class Talker {
 */
         new Thread(() -> {
             while (isRecording) {
-                asyncHandler.post(encode);
                 asyncHandler.post(play);
+                //asyncHandler.post(encode);
                 try {
                     Thread.sleep(20);
                 } catch (InterruptedException e) {
@@ -193,6 +279,7 @@ public class Talker {
                 }
             }
         }).start();
+        pullHandler.post(encode);
     }
     private void write(Ctrl ctrl, byte[] data){try {
         //System.out.println(data.length);
