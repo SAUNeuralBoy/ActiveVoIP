@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -47,6 +48,9 @@ public class Talker {
     public static final int SAMPLE_RATE = 8000;
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
     public static final int RECORD_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
+    public static final int FRAME_INTERVAL = 20;
+    public static final int ASYNC_TOLERANCE = 10;
+    public static final int PL_REFRESH_INVERVAL = 50;
 
     private final UUID otherId;
     private final SecretKey secretKey;
@@ -86,6 +90,8 @@ public class Talker {
         public abstract short[] predict(int defaultSize);
     }
     private static class OpusCodec extends Codec {
+        public static final int BITRATE = 24000;
+        public static final int BUF_SIZE = 2048;
         private final OpusEncoder encoder;
         private final OpusDecoder decoder;
         private final byte[] buf;
@@ -100,11 +106,11 @@ public class Talker {
                 e.printStackTrace();
                 throw new RuntimeException();
             }
-            encoder.setBitrate(24000);
+            encoder.setBitrate(BITRATE);
             encoder.setSignalType(OpusSignal.OPUS_SIGNAL_VOICE);
             encoder.setComplexity(10);
-            buf = new byte[2048];
-            sbuf = new short[2048];
+            buf = new byte[BUF_SIZE];
+            sbuf = new short[BUF_SIZE];
             last = null;
             this.frameSize = frameSize;
         }
@@ -162,8 +168,8 @@ public class Talker {
 
 
 
-        int recordBufSize = 8*20;//AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*2;
-        Codec codec = new OpusCodec(8*20);
+        int recordBufSize = (SAMPLE_RATE/1000)* FRAME_INTERVAL;//AudioRecord.getMinBufferSize(SAMPLE_RATE,CHANNEL, RECORD_ENCODING)*2;
+        Codec codec = new OpusCodec(recordBufSize);
         audioRecord = new AudioRecord(AUDIO_SOURCE,SAMPLE_RATE, CHANNEL, RECORD_ENCODING,recordBufSize);
         short[] buf = new short[recordBufSize];
 
@@ -216,19 +222,29 @@ public class Talker {
                     mService.cut();
             }
         });
+        AtomicInteger total= new AtomicInteger();
+        AtomicInteger lost= new AtomicInteger();
         Runnable play = () -> {
             if(!isRecording)    return;
             short[] pcm;
-            if(incoming.size()<1)
+            total.incrementAndGet();
+            if(incoming.size()<1) {
                 pcm = codec.predict(recordBufSize);
+                lost.incrementAndGet();
+            }
             else {
                 pcm = codec.decode(incoming.remove(0));
-                if(incoming.size()>10)  incoming.remove(0);
+                if(incoming.size()> ASYNC_TOLERANCE)  incoming.remove(0);
             }
             if(pcm.length>0) {
                 //if(audioTrack.getPlayState()!=AudioTrack.PLAYSTATE_PLAYING) audioTrack.play();
-                System.out.println(System.currentTimeMillis());
+                //System.out.println(System.currentTimeMillis());
                 audioTrack.write(pcm, 0, pcm.length, AudioTrack.WRITE_NON_BLOCKING);
+            }
+            if(total.get()> PL_REFRESH_INVERVAL) {
+                System.out.println(((double) lost.get() / total.get()) * 100);
+                total.set(0);
+                lost.set(0);
             }
         };
         /*
@@ -272,6 +288,7 @@ public class Talker {
                 asyncHandler.post(play);
                 //asyncHandler.post(encode);
                 try {
+                    //noinspection BusyWait
                     Thread.sleep(20);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
