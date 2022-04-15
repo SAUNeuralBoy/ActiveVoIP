@@ -49,8 +49,8 @@ public class Talker {
     public static final int CHANNEL = AudioFormat.CHANNEL_IN_MONO;
     public static final int RECORD_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     public static final int FRAME_INTERVAL = 20;
-    public static final int ASYNC_TOLERANCE = 10;
-    public static final int PL_REFRESH_INVERVAL = 50;
+    public static final int ASYNC_TOLERANCE = 100/FRAME_INTERVAL;
+    public static final int PL_REFRESH_INTERVAL = 50;
 
     private final UUID otherId;
     private final SecretKey secretKey;
@@ -241,7 +241,7 @@ public class Talker {
                 //System.out.println(System.currentTimeMillis());
                 audioTrack.write(pcm, 0, pcm.length, AudioTrack.WRITE_NON_BLOCKING);
             }
-            if(total.get()> PL_REFRESH_INVERVAL) {
+            if(total.get()> PL_REFRESH_INTERVAL) {
                 System.out.println(((double) lost.get() / total.get()) * 100);
                 total.set(0);
                 lost.set(0);
