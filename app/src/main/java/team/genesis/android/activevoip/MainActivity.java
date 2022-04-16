@@ -102,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
                     NavigationUI.setupActionBarWithNavController(MainActivity.this, navController, mAppBarConfiguration);
                     NavigationUI.setupWithNavController(navigationView, navController);
                     findViewById(R.id.button_compass).setOnClickListener(v -> navController.navigate(R.id.nav_gallery));
-                    findViewById(R.id.button_edit).setOnClickListener(v -> navController.navigate(R.id.nav_edit));
+                    findViewById(R.id.button_edit).setOnClickListener(v -> getContactAdapter().setEditable(!getContactAdapter().isEditable()));
 
 
 
@@ -230,14 +230,15 @@ public class MainActivity extends AppCompatActivity {
     public void lock(){
         findViewById(R.id.button_cut).setVisibility(View.VISIBLE);
         findViewById(R.id.button_compass).setClickable(false);
-        lockContactList(true);
+        getContactAdapter().setLocked(true);
     }
     public void unlock(){
         findViewById(R.id.button_cut).setVisibility(View.GONE);
         findViewById(R.id.button_compass).setClickable(true);
-        lockContactList(false);
+        getContactAdapter().setLocked(false);
     }
-    private void lockContactList(boolean b) {
-        ((ContactAdapter) Objects.requireNonNull(((RecyclerView) findViewById(R.id.list_contact)).getAdapter())).setLocked(b);
+
+    public ContactAdapter getContactAdapter() {
+        return (ContactAdapter) Objects.requireNonNull(((RecyclerView) findViewById(R.id.list_contact)).getAdapter());
     }
 }

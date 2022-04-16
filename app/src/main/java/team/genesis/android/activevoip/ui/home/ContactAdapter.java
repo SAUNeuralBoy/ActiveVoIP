@@ -148,10 +148,19 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
 
     private List<ContactEntity> mContactList;
     private final MainActivity mActivity;
-    private final boolean mEditable;
+
+    public boolean isEditable() {
+        return mEditable;
+    }
+
+    private boolean mEditable;
 
     public void setLocked(boolean locked) {
         this.locked = locked;
+        notifyDataSetChanged();
+    }
+    public void setEditable(boolean editable) {
+        this.mEditable = editable;
         notifyDataSetChanged();
     }
 
@@ -160,6 +169,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         mActivity = activity;
         setContactList(contacts);
         mEditable = editable;
+        locked = false;
     }
     public ContactAdapter(MainActivity activity, List<ContactEntity> contacts){
         this(activity,contacts,false);
