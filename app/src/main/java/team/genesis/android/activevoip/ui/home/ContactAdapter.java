@@ -135,8 +135,10 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             }
         }
         if(mEditable){
-            holder.setDefaultVisibility();
-            holder.buttonEdit.setVisibility(View.VISIBLE);
+            if(contact.status.equals(Contact.Status.READY)) {
+                holder.setDefaultVisibility();
+                holder.buttonEdit.setVisibility(View.VISIBLE);
+            }
             if(!locked) holder.buttonDelete.setVisibility(View.VISIBLE);
         }
     }
