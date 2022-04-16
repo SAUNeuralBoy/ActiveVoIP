@@ -32,6 +32,7 @@ import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.UnrecoverableEntryException;
@@ -528,7 +529,8 @@ public class VoIPService extends Service {
     private boolean sign(byte[] data, Contact contact, ByteBuf buf) {
         try {
             if (!keyStore.containsAlias(Crypto.to64(contact.uuid.getBytes()))) return false;
-            s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
+            //s.initSign(((KeyStore.PrivateKeyEntry) keyStore.getEntry(Crypto.to64(contact.uuid.getBytes()), null)).getPrivateKey());
+            s.initSign((PrivateKey) keyStore.getKey(Crypto.to64(contact.uuid.getBytes()), null));
             s.update(data);
             byte[] sign = s.sign();
             Network.writeBytes(buf, sign);

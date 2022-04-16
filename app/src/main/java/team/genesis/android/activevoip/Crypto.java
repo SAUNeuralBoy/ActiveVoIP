@@ -79,7 +79,8 @@ public class Crypto {
             keyStore.load(null);
             try {
                 if(keyStore.containsAlias(alias))
-                    return ((KeyStore.SecretKeyEntry)keyStore.getEntry(alias,null)).getSecretKey();
+                    //return ((KeyStore.SecretKeyEntry)keyStore.getEntry(alias,null)).getSecretKey();
+                    return (SecretKey) keyStore.getKey(alias,null);
             } catch (KeyStoreException | UnrecoverableEntryException ignored) {
             }
             KeyGenerator keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
