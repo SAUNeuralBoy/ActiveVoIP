@@ -107,7 +107,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         switch (contact.status){
             case READY:
                 holder.contactFingerPrint.setText(Crypto.bytesToHex(contact.pkSHA256(),":"));
-                holder.buttonCall.setVisibility(View.VISIBLE);
+                if(!locked) holder.buttonCall.setVisibility(View.VISIBLE);
                 break;
             case CONFIRM_WAIT:
                 //holder.contactStatus.setText(R.string.wait_for_confirm);
@@ -126,6 +126,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         if(contact.otherPkt!=null){
             if(contact.invoke>System.currentTimeMillis()-1000) {
                 holder.layoutIncoming.setVisibility(View.VISIBLE);
+                if(locked)  holder.buttonAcceptCall.setVisibility(View.GONE);
                 holder.buttonCall.setVisibility(View.GONE);
             }
             else{
@@ -136,7 +137,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
         if(mEditable){
             holder.setDefaultVisibility();
             holder.buttonEdit.setVisibility(View.VISIBLE);
-            holder.buttonDelete.setVisibility(View.VISIBLE);
+            if(!locked) holder.buttonDelete.setVisibility(View.VISIBLE);
         }
     }
 
@@ -148,6 +149,13 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
     private List<ContactEntity> mContactList;
     private final MainActivity mActivity;
     private final boolean mEditable;
+
+    public void setLocked(boolean locked) {
+        this.locked = locked;
+        notifyDataSetChanged();
+    }
+
+    private boolean locked;
     public ContactAdapter(MainActivity activity, List<ContactEntity> contacts, boolean editable){
         mActivity = activity;
         setContactList(contacts);

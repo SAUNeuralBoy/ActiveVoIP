@@ -125,6 +125,7 @@ public class VoIPService extends Service {
         }
         public void push(Contact contact){
             //setStat(Status.INCOMING);
+            if(!contact.status.equals(Contact.Status.READY))    return;
             if(talk!=null&&contact.uuid.equals(talk.contact.uuid))  return;
             contact.invoke = System.currentTimeMillis();
             uiHandler.postDelayed(() -> {

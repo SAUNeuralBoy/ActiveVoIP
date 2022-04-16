@@ -31,12 +31,15 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import team.genesis.android.activevoip.data.Contact;
 import team.genesis.android.activevoip.db.ContactDao;
 import team.genesis.android.activevoip.ui.MainViewModel;
+import team.genesis.android.activevoip.ui.home.ContactAdapter;
 import team.genesis.data.UUID;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -90,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
                     NavigationView navigationView = findViewById(R.id.nav_view);
                     // Passing each menu ID as a set of Ids because each
                     // menu should be considered as top level destinations.
+                    //noinspection deprecation
                     mAppBarConfiguration = new AppBarConfiguration.Builder(
                             R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
                             .setDrawerLayout(drawer)
@@ -112,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
                                 color = R.color.distrubing_color;
                                 break;
                         }
+                        //noinspection deprecation
                         ((ImageButton)findViewById(R.id.button_compass)).setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
                     });
 
@@ -224,10 +229,15 @@ public class MainActivity extends AppCompatActivity {
     }
     public void lock(){
         findViewById(R.id.button_cut).setVisibility(View.VISIBLE);
-        findViewById(R.id.list_contact).setClickable(false);
+        findViewById(R.id.button_compass).setClickable(false);
+        lockContactList(true);
     }
     public void unlock(){
         findViewById(R.id.button_cut).setVisibility(View.GONE);
-        findViewById(R.id.list_contact).setClickable(true);
+        findViewById(R.id.button_compass).setClickable(true);
+        lockContactList(false);
+    }
+    private void lockContactList(boolean b) {
+        ((ContactAdapter) Objects.requireNonNull(((RecyclerView) findViewById(R.id.list_contact)).getAdapter())).setLocked(b);
     }
 }
