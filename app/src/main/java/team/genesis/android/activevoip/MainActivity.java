@@ -159,34 +159,13 @@ public class MainActivity extends AppCompatActivity {
                     findViewById(R.id.button_cut).setOnClickListener(v -> service.getDispatcher().cut());
                     final ImageButton buttonSpeaker = findViewById(R.id.button_speaker);
                     buttonSpeaker.setOnClickListener(v -> {
-                        if(!service.isUsingAttached()){
-                            v.setVisibility(View.GONE);
-                            return;
-                        }
-                        int color;
-                        if(service.isUsingSpeaker())
-                            color = R.color.disabled_color;
-                        else
-                            color = R.color.fine_color;
-                        //noinspection deprecation
-                        buttonSpeaker.setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
                         service.switchSpeaker();
+                        uiHandler.post(()->detectSpeaker(buttonSpeaker));
                     });
                     Runnable deviceDetect = new Runnable() {
                         @Override
                         public void run() {
-                            if(service.isUsingAttached()&&buttonSpeaker.getVisibility()==View.GONE) {
-                                buttonSpeaker.setVisibility(View.VISIBLE);
-                                int color;
-                                if(service.isUsingSpeaker())
-                                    color = R.color.fine_color;
-                                else
-                                    color = R.color.disabled_color;
-                                //noinspection deprecation
-                                buttonSpeaker.setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
-                            }
-                            else if((!service.isUsingAttached())&&buttonSpeaker.getVisibility()==View.VISIBLE)
-                                buttonSpeaker.setVisibility(View.GONE);
+                            detectSpeaker(buttonSpeaker);
                             uiHandler.postDelayed(this,1000);
                         }
                     };
@@ -200,6 +179,21 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         bindService(new Intent(this,VoIPService.class),conn,Context.BIND_ABOVE_CLIENT|Context.BIND_IMPORTANT);
+    }
+
+    private void detectSpeaker(ImageButton buttonSpeaker) {
+        if(service.isUsingAttached()) {
+            if(buttonSpeaker.getVisibility()== View.GONE)   buttonSpeaker.setVisibility(View.VISIBLE);
+            int color;
+            if(service.isUsingSpeaker())
+                color = R.color.fine_color;
+            else
+                color = R.color.disabled_color;
+            //noinspection deprecation
+            buttonSpeaker.setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
+        }
+        else if((!service.isUsingAttached())&&buttonSpeaker.getVisibility()==View.VISIBLE)
+            buttonSpeaker.setVisibility(View.GONE);
     }
 
     @Override
