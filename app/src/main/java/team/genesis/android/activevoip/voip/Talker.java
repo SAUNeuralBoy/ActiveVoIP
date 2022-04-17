@@ -9,6 +9,8 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Handler;
 
+import androidx.annotation.NonNull;
+
 import java.net.SocketException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -255,12 +257,11 @@ public class Talker {
                 deviceManager.updateDevices(audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS),
                         audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
                 AudioDeviceInfo inPriority = deviceManager.getDevice(DeviceManager::deviceIsInput);
-                if(inPriority!=null&&inPriority.getId()!=audioRecord.getRoutedDevice().getId())
+                if(shouldUpdatePreferredIn(inPriority
+                        ,audioRecord.getRoutedDevice(),audioRecord.getPreferredDevice()))
                     setInDevice(inPriority);
                 inPriority = deviceManager.getDevice(DeviceManager::deviceIsOutput);
-                AudioDeviceInfo currentDevice = audioTrack.getRoutedDevice();
-                if(inPriority!=null&&inPriority.getId()!=currentDevice.getId()&&
-                        (!(DeviceManager.deviceIsAttached(inPriority)&&DeviceManager.deviceIsAttached(currentDevice))))
+                if(shouldUpdatePreferredOut(inPriority,audioTrack.getRoutedDevice(),audioTrack.getPreferredDevice()))
                     setOutDevice(inPriority);
                 uiHandler.postDelayed(this,1000);
             }
@@ -340,6 +341,21 @@ public class Talker {
         audioTrack.stop();
         audioTrack.release();
     }
+    private AudioDeviceInfo getCurrentDevice(AudioDeviceInfo routing,AudioDeviceInfo preferred){
+        if(preferred!=null) return preferred;
+        return routing;
+    }
+    private boolean shouldUpdatePreferredIn(AudioDeviceInfo inPriority,AudioDeviceInfo routing,AudioDeviceInfo preferred){
+        if(inPriority==null)    return false;
+        AudioDeviceInfo currentDevice = getCurrentDevice(routing, preferred);
+        if(currentDevice==null)   return true;
+        return currentDevice.getId()!=inPriority.getId();
+    }
+    private boolean shouldUpdatePreferredOut(AudioDeviceInfo inPriority,AudioDeviceInfo routing,AudioDeviceInfo preferred){
+        if(inPriority==null)    return false;
+        if(getCurrentDevice(routing, preferred)==null)  return true;
+        return !isUsingAttached() || !DeviceManager.deviceIsAttached(inPriority);
+    }
     public void checkBlueTooth(AudioDeviceInfo device){
         if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&(!audioManager.isBluetoothScoOn()))
             audioManager.setBluetoothScoOn(true);
@@ -360,11 +376,11 @@ public class Talker {
 
     public boolean isUsingAttached(){
         if(audioTrack==null) return false;
-        return DeviceManager.deviceIsAttached(audioTrack.getRoutedDevice());
+        return DeviceManager.deviceIsAttached(getCurrentDevice(audioTrack.getRoutedDevice(),audioTrack.getPreferredDevice()));
     }
     public boolean isUsingSpeaker(){
         if(!isUsingAttached())  return false;
-        return DeviceManager.deviceIsSpeaker(audioTrack.getRoutedDevice());
+        return DeviceManager.deviceIsSpeaker(getCurrentDevice(audioTrack.getRoutedDevice(),audioTrack.getPreferredDevice()));
     }
     public void switchSpeaker(){
         if(!isUsingAttached())  return;
@@ -415,7 +431,7 @@ public class Talker {
             for(AudioDeviceInfo i:outputDevices) devices.add(new Device(i,Device.TYPE_INPUT));
             devices.sort((o1, o2) -> Integer.compare(priority(o1.deviceInfo), priority(o2.deviceInfo)));
         }
-        public static int priority(AudioDeviceInfo device){
+        public static int priority(@NonNull AudioDeviceInfo device){
             if(device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES||device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADSET)
                 return 1;
             if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
@@ -427,10 +443,14 @@ public class Talker {
             return deviceIsAttached(device.deviceInfo);
         }
         public static boolean deviceIsAttached(AudioDeviceInfo deviceInfo){
-            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE||deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+            if(deviceInfo==null)    return false;
+            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE||
+                    deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER||
+                    deviceInfo.getType()==AudioDeviceInfo.TYPE_TELEPHONY;
         }
 
         private static boolean deviceIsSpeaker(AudioDeviceInfo deviceInfo){
+            if(deviceInfo==null)    return false;
             return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
         }
         private static boolean deviceIsSpeaker(Device device){
