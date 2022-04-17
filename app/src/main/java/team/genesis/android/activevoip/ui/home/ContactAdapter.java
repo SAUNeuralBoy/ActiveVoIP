@@ -127,6 +127,7 @@ public class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.ViewHold
             if(contact.invoke>System.currentTimeMillis()-1000) {
                 holder.layoutIncoming.setVisibility(View.VISIBLE);
                 if(locked)  holder.buttonAcceptCall.setVisibility(View.GONE);
+                else    holder.buttonAcceptCall.setVisibility(View.VISIBLE);
                 holder.buttonCall.setVisibility(View.GONE);
             }
             else{
