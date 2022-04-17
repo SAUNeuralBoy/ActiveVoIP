@@ -175,8 +175,16 @@ public class MainActivity extends AppCompatActivity {
                     Runnable deviceDetect = new Runnable() {
                         @Override
                         public void run() {
-                            if(service.isUsingAttached()&&buttonSpeaker.getVisibility()==View.GONE)
+                            if(service.isUsingAttached()&&buttonSpeaker.getVisibility()==View.GONE) {
                                 buttonSpeaker.setVisibility(View.VISIBLE);
+                                int color;
+                                if(service.isUsingSpeaker())
+                                    color = R.color.fine_color;
+                                else
+                                    color = R.color.disabled_color;
+                                //noinspection deprecation
+                                buttonSpeaker.setImageTintList(ColorStateList.valueOf(getResources().getColor(color)));
+                            }
                             else if((!service.isUsingAttached())&&buttonSpeaker.getVisibility()==View.VISIBLE)
                                 buttonSpeaker.setVisibility(View.GONE);
                             uiHandler.postDelayed(this,1000);
