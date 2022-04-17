@@ -66,6 +66,7 @@ public class Talker {
     private final VoIPService mService;
 
     public Talker(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, AudioManager audioManager, VoIPService service){
+        deviceManager = new DeviceManager();
         try {
             cipherEncrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding",cipherEncrypt.getProvider());
@@ -247,42 +248,24 @@ public class Talker {
                 lost.set(0);
             }
         };
-        /*
-        final AudioDeviceInfo[] lastDevice = {null};
         Runnable detect = new Runnable() {
             @Override
             public void run() {
                 if(!isRecording)    return;
-                AudioDeviceInfo device = null,earPhone=null,stereo=null;
-                for(AudioDeviceInfo i:audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)){
-                    if(i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES||i.getType()==AudioDeviceInfo.TYPE_WIRED_HEADSET){
-                        device = i;
-                        break;
-                    }
-                    if (i.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) device = i;
-                    if (i.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP&&device==null)
-                        device = i;
-                    if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
-                        earPhone = i;
-                    if(i.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
-                        stereo = i;
-                }
-                if(device!=null&&!Objects.equals(lastDevice[0], device)) {
-                    audioTrack.setPreferredDevice(device);
-                    //fragment.disableSelect();
-                    if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&!audioManager.isBluetoothScoOn()){
-                        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                        audioManager.startBluetoothSco();
-                        audioManager.setBluetoothScoOn(true);
-                    }
-                    lastDevice[0] = device;
-                }
-                //else if(earPhone!=null&&stereo!=null)   fragment.passDevice(earPhone,stereo);
-                uiHandler.postDelayed(this,200);
+                deviceManager.updateDevices(audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS),
+                        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
+                AudioDeviceInfo inPriority = deviceManager.getDevice(DeviceManager::deviceIsInput);
+                if(inPriority!=null&&inPriority.getId()!=audioRecord.getRoutedDevice().getId())
+                    setInDevice(inPriority);
+                inPriority = deviceManager.getDevice(DeviceManager::deviceIsOutput);
+                AudioDeviceInfo currentDevice = audioTrack.getRoutedDevice();
+                if(inPriority!=null&&inPriority.getId()!=currentDevice.getId()&&
+                        (!(DeviceManager.deviceIsAttached(inPriority)&&DeviceManager.deviceIsAttached(currentDevice))))
+                    setOutDevice(inPriority);
+                uiHandler.postDelayed(this,1000);
             }
         };
         uiHandler.post(detect);
-*/
         new Thread(() -> {
             while (isRecording) {
                 asyncHandler.post(play);
@@ -357,7 +340,108 @@ public class Talker {
         audioTrack.stop();
         audioTrack.release();
     }
+    public void checkBlueTooth(AudioDeviceInfo device){
+        if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&(!audioManager.isBluetoothScoOn()))
+            audioManager.setBluetoothScoOn(true);
+        if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP&&(!audioManager.isBluetoothA2dpOn()))
+            //noinspection deprecation
+            audioManager.setBluetoothA2dpOn(true);
+    }
+    public void setInDevice(AudioDeviceInfo device){
+        if(audioRecord==null||device==null)   return;
+        checkBlueTooth(device);
+        audioRecord.setPreferredDevice(device);
+    }
     public void setOutDevice(AudioDeviceInfo device){
+        if(audioTrack==null||device==null)   return;
+        checkBlueTooth(device);
         audioTrack.setPreferredDevice(device);
     }
+
+    public boolean isUsingAttached(){
+        if(audioTrack==null) return false;
+        return DeviceManager.deviceIsAttached(audioTrack.getRoutedDevice());
+    }
+    public boolean isUsingSpeaker(){
+        if(!isUsingAttached())  return false;
+        return DeviceManager.deviceIsSpeaker(audioTrack.getRoutedDevice());
+    }
+    public void switchSpeaker(){
+        if(!isUsingAttached())  return;
+        if(isUsingSpeaker())
+            setOutDevice(deviceManager.getEarphone());
+        else
+            setOutDevice(deviceManager.getSpeaker());
+    }
+    private static class DeviceManager{
+        private static class Device{
+            AudioDeviceInfo deviceInfo;
+            int type;
+
+            public Device(AudioDeviceInfo deviceInfo, int type) {
+                this.deviceInfo = deviceInfo;
+                this.type = type;
+            }
+
+            public static final int TYPE_INPUT = 0;
+            public static final int TYPE_OUTPUT = 1;
+        }
+        private final List<Device> devices;
+        public DeviceManager(){
+            devices = new LinkedList<>();
+        }
+        public AudioDeviceInfo getSpeaker(){
+            return getDevice(DeviceManager::deviceIsSpeaker,DeviceManager::deviceIsOutput);
+        }
+        public AudioDeviceInfo getEarphone(){
+            return getDevice(device -> deviceIsAttached(device)&&(!deviceIsSpeaker(device)), DeviceManager::deviceIsOutput);
+        }
+        private interface DeviceInfoCondition{
+            boolean match(Device device);
+        }
+        private AudioDeviceInfo getDevice(DeviceInfoCondition c1,DeviceInfoCondition c2){
+            AudioDeviceInfo device = getDevice(c1);
+            if(device==null)    device = getDevice(c2);
+            return device;
+        }
+        private AudioDeviceInfo getDevice(DeviceInfoCondition condition){
+            for(Device i:devices)
+                if(condition.match(i))  return i.deviceInfo;
+            return null;
+        }
+        public void updateDevices(AudioDeviceInfo[] inputDevices,AudioDeviceInfo[] outputDevices){
+            devices.clear();
+            for(AudioDeviceInfo i:inputDevices) devices.add(new Device(i,Device.TYPE_INPUT));
+            for(AudioDeviceInfo i:outputDevices) devices.add(new Device(i,Device.TYPE_INPUT));
+            devices.sort((o1, o2) -> Integer.compare(priority(o1.deviceInfo), priority(o2.deviceInfo)));
+        }
+        public static int priority(AudioDeviceInfo device){
+            if(device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES||device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADSET)
+                return 1;
+            if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+                return 2;
+            if(deviceIsAttached(device)||device.getType()==AudioDeviceInfo.TYPE_BUILTIN_MIC)    return 3;
+            return 4;
+        }
+        private static boolean deviceIsAttached(Device device){
+            return deviceIsAttached(device.deviceInfo);
+        }
+        public static boolean deviceIsAttached(AudioDeviceInfo deviceInfo){
+            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE||deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+        }
+
+        private static boolean deviceIsSpeaker(AudioDeviceInfo deviceInfo){
+            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+        }
+        private static boolean deviceIsSpeaker(Device device){
+            return deviceIsSpeaker(device.deviceInfo);
+        }
+        public static boolean deviceIsInput(Device device){
+            return device.type==Device.TYPE_INPUT;
+        }
+        private static boolean deviceIsOutput(Device device){
+            return device.type==Device.TYPE_OUTPUT;
+        }
+    }
+    private final DeviceManager deviceManager;
 }

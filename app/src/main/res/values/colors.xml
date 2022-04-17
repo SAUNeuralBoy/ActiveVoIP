@@ -10,4 +10,5 @@
     <color name="error_color">#FF0000</color>
     <color name="distrubing_color">#FFFF00</color>
     <color name="fine_color">#00FF00</color>
+    <color name="disabled_color">#323232</color>
 </resources>

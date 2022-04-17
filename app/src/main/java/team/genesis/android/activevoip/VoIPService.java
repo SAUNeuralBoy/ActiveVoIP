@@ -161,6 +161,8 @@ public class VoIPService extends Service {
             return true;
         }
         public void startTalkingIfAccepted(UUID uuid){
+            if(talk==null)  return;
+            if(!uuid.equals(talk.getContact().uuid))    return;
             startTalking(uuid,talk.getContact().otherPkt);
         }
         public void startTalking(UUID uuid,byte[] otherPkt){
@@ -542,5 +544,17 @@ public class VoIPService extends Service {
     }
     public void cut(){
         dispatcher.cut();
+    }
+    public boolean isUsingAttached(){
+        if(dispatcher.talker==null) return false;
+        return dispatcher.talker.isUsingAttached();
+    }
+    public boolean isUsingSpeaker(){
+        if(!isUsingAttached())  return false;
+        return dispatcher.talker.isUsingSpeaker();
+    }
+    public void switchSpeaker(){
+        if(dispatcher.talker==null) return;
+        dispatcher.talker.switchSpeaker();
     }
 }
