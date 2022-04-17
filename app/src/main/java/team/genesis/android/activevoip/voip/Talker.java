@@ -93,7 +93,7 @@ public class Talker {
         public abstract short[] predict(int defaultSize);
     }
     private static class OpusCodec extends Codec {
-        public static final int BITRATE = 24000;
+        public static final int BITRATE = 8000;
         public static final int BUF_SIZE = 2048;
         private final OpusEncoder encoder;
         private final OpusDecoder decoder;
@@ -367,8 +367,10 @@ public class Talker {
         return currentDevice.getId()!=inPriority.getId();
     }
     public void checkBlueTooth(AudioDeviceInfo device){
-        if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&(!audioManager.isBluetoothScoOn()))
+        if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO&&(!audioManager.isBluetoothScoOn())) {
+            audioManager.startBluetoothSco();
             audioManager.setBluetoothScoOn(true);
+        }
         if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP&&(!audioManager.isBluetoothA2dpOn()))
             //noinspection deprecation
             audioManager.setBluetoothA2dpOn(true);
