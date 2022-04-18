@@ -9,7 +9,7 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Handler;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.net.SocketException;
 import java.security.InvalidAlgorithmParameterException;
@@ -60,12 +60,14 @@ public class Talker {
     private Cipher cipherEncrypt,cipherDecrypt;
     private boolean isRecording;
     private AudioRecord audioRecord;
-    private Handler asyncHandler;
+    //private Handler asyncHandler;
     private Handler pullHandler;
+    private Handler playHandler;
 
     private AudioTrack audioTrack;
     private final AudioManager audioManager;
     private final VoIPService mService;
+    private long counter;
 
     public Talker(UUID ourId, UUID otherId, SecretKey secretKey, String hostName, int port, AudioManager audioManager, VoIPService service){
         deviceManager = new DeviceManager();
@@ -178,9 +180,11 @@ public class Talker {
 
         isRecording = true;
         audioRecord.startRecording();
-        asyncHandler = UI.getCycledHandler("voip_async");
+        //asyncHandler = UI.getCycledHandler("voip_async");
         pullHandler = UI.getCycledHandler("voip_pull");
+        playHandler = UI.getCycledHandler("voip_play");
         Handler uiHandler = new Handler();
+        FrameManager frameManager = new RawFrameManager(ASYNC_TOLERANCE);
 
         Runnable encode = new Runnable() {
             @Override
@@ -188,19 +192,40 @@ public class Talker {
                 //System.out.println(System.currentTimeMillis());
                 if (!isRecording) return;
                 int len = audioRecord.read(buf, 0, recordBufSize, AudioRecord.READ_BLOCKING);
+                //System.out.println(System.currentTimeMillis());
                 //System.out.println(len);
                 if (len < 0) return;
-                Talker.this.write(Ctrl.TALK_PACK, codec.encode(buf,len));
+                Talker.this.write(codec.encode(buf,len));
                 pullHandler.post(this);
             }
         };
-
-        List<byte[]> incoming = Collections.synchronizedList(new LinkedList<>());
+        final short[][] predict = {codec.predict(recordBufSize)};
+        final int[] total = {0};
+        final int[] loss = { 0 };
+        Runnable play = () -> {
+            if (!isRecording) return;
+            total[0]++;
+            FrameManager.Frame f = frameManager.get();
+            short[] pcm;
+            if(f==null) {
+                loss[0]++;
+                //System.out.println(((double) loss[0] / total[0])*100);
+                pcm = predict[0];
+            }
+            else{ pcm = f.decoded;
+                predict[0] =f.predict;}
+            //System.out.println(System.currentTimeMillis());
+            //System.out.println(pcm.length);
+            //System.out.println(audioTrack.getBufferSizeInFrames());
+            if(pcm.length>0)
+                audioTrack.write(pcm,0,Integer.min(pcm.length,recordBufSize),AudioTrack.WRITE_NON_BLOCKING);
+            //playHandler.post(this);
+        };
         audioTrack = new AudioTrack.Builder().setAudioFormat(new AudioFormat.Builder().setEncoding(RECORD_ENCODING)
                 .setSampleRate(SAMPLE_RATE)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
-                .setBufferSizeInBytes(recordBufSize)
+                .setBufferSizeInBytes(recordBufSize*2)
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -219,37 +244,13 @@ public class Talker {
             switch (req.ctrl){
                 case TALK_PACK:
                     if(req.data==null||req.data.length<1)  return;
-                    incoming.add(req.data);
+                    //incoming.add(req.data);
+                    playHandler.post(()->frameManager.push(new FrameManager.Frame(codec.decode(req.data),codec.predict(recordBufSize),req.counter)));
                     break;
                 case TALK_CUT:
                     mService.cut();
             }
         });
-        AtomicInteger total= new AtomicInteger();
-        AtomicInteger lost= new AtomicInteger();
-        Runnable play = () -> {
-            if(!isRecording)    return;
-            short[] pcm;
-            total.incrementAndGet();
-            if(incoming.size()<1) {
-                pcm = codec.predict(recordBufSize);
-                lost.incrementAndGet();
-            }
-            else {
-                pcm = codec.decode(incoming.remove(0));
-                if(incoming.size()> ASYNC_TOLERANCE)  incoming.remove(0);
-            }
-            if(pcm.length>0) {
-                //if(audioTrack.getPlayState()!=AudioTrack.PLAYSTATE_PLAYING) audioTrack.play();
-                //System.out.println(System.currentTimeMillis());
-                audioTrack.write(pcm, 0, pcm.length, AudioTrack.WRITE_NON_BLOCKING);
-            }
-            if(total.get()> PL_REFRESH_INTERVAL) {
-                //System.out.println(((double) lost.get() / total.get()) * 100);
-                total.set(0);
-                lost.set(0);
-            }
-        };
         Runnable detect = new Runnable() {
             @Override
             public void run() {
@@ -269,33 +270,34 @@ public class Talker {
         uiHandler.post(detect);
         new Thread(() -> {
             while (isRecording) {
-                asyncHandler.post(play);
+                playHandler.post(play);
                 //asyncHandler.post(encode);
                 try {
                     //noinspection BusyWait
-                    Thread.sleep(20);
+                    Thread.sleep(FRAME_INTERVAL);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                     return;
                 }
             }
         }).start();
-        pullHandler.post(encode);
+        counter = 0;pullHandler.post(encode);//playHandler.post(play);
     }
-    private void write(Ctrl ctrl, byte[] data){try {
+    private void write(byte[] data){try {
         //System.out.println(data.length);
         ByteBuf buf = Unpooled.buffer();
-        buf.writeInt(ctrl.ordinal());
+        buf.writeInt(Ctrl.TALK_PACK.ordinal());
         cipherEncrypt.init(Cipher.ENCRYPT_MODE, secretKey);
         buf.writeBytes(cipherEncrypt.getIV());
         buf.writeBytes(cipherEncrypt.doFinal(data));
+        buf.writeLong(counter++);
         tunnel.send(Network.readAllBytes(buf), otherId);
     } catch (BadPaddingException | IllegalBlockSizeException | InvalidKeyException e) {
         e.printStackTrace();
         exit(0);
     }
     }
-    public Talker.Request parse(byte[] pack) throws IndexOutOfBoundsException, Crypto.DecryptException {
+    @Nullable public Talker.Request parse(byte[] pack) throws Crypto.DecryptException {
         if(pack.length==4){
             Talker.Request req = new Talker.Request();
             ByteBuf buf = Unpooled.copiedBuffer(pack);
@@ -303,11 +305,11 @@ public class Talker {
             req.data = null;
             return req;
         }
-        if(pack.length<=4+16)  throw new IndexOutOfBoundsException();
+        if(pack.length<=4+16+8)  return null;//throw new IndexOutOfBoundsException();
         Talker.Request req = new Talker.Request();
         ByteBuf buf = Unpooled.copiedBuffer(pack);
         req.ctrl = Ctrl.values()[buf.readInt()];
-        byte[] cipher = new byte[pack.length-4];
+        byte[] cipher = new byte[pack.length-4-8];
         buf.readBytes(cipher);
         try {
             cipherDecrypt.init(Cipher.DECRYPT_MODE,secretKey,new IvParameterSpec(Arrays.copyOf(cipher,16)));
@@ -321,12 +323,14 @@ public class Talker {
         } catch (BadPaddingException | IllegalBlockSizeException e) {
             throw new Crypto.DecryptException();
         }
+        req.counter = buf.readLong();
         return req;
     }
 
     private static class Request{
         Ctrl ctrl;
         byte[] data;
+        long counter;
     }
 
     public void cut(){
@@ -334,7 +338,10 @@ public class Talker {
         buf.writeInt(Ctrl.TALK_CUT.ordinal());
         tunnel.send(Network.readAllBytes(buf),otherId);
         isRecording = false;
-        asyncHandler.getLooper().quit();
+        //asyncHandler.getLooper().quit();
+        pullHandler.getLooper().quit();
+        playHandler.getLooper().quit();
+
         audioRecord.stop();
         audioRecord.release();
         tunnel.release();
@@ -401,79 +408,6 @@ public class Talker {
         else
             setOutDevice(deviceManager.getSpeaker());
     }
-    private static class DeviceManager{
-        private static class Device{
-            AudioDeviceInfo deviceInfo;
-            int type;
 
-            public Device(AudioDeviceInfo deviceInfo, int type) {
-                this.deviceInfo = deviceInfo;
-                this.type = type;
-            }
-
-            public static final int TYPE_INPUT = 0;
-            public static final int TYPE_OUTPUT = 1;
-        }
-        private final List<Device> devices;
-        public DeviceManager(){
-            devices = new LinkedList<>();
-        }
-        public AudioDeviceInfo getSpeaker(){
-            return getDevice(device -> deviceIsSpeaker(device)&&deviceIsOutput(device),DeviceManager::deviceIsOutput);
-        }
-        public AudioDeviceInfo getEarphone(){
-            return getDevice(device -> deviceIsAttached(device)&&!deviceIsSpeaker(device)&&deviceIsOutput(device), DeviceManager::deviceIsOutput);
-        }
-        private interface DeviceInfoCondition{
-            boolean match(Device device);
-        }
-        private AudioDeviceInfo getDevice(DeviceInfoCondition c1,DeviceInfoCondition c2){
-            AudioDeviceInfo device = getDevice(c1);
-            if(device==null)    device = getDevice(c2);
-            return device;
-        }
-        private AudioDeviceInfo getDevice(DeviceInfoCondition condition){
-            for(Device i:devices)
-                if(condition.match(i))  return i.deviceInfo;
-            return null;
-        }
-        public void updateDevices(AudioDeviceInfo[] inputDevices,AudioDeviceInfo[] outputDevices){
-            devices.clear();
-            for(AudioDeviceInfo i:inputDevices) devices.add(new Device(i,Device.TYPE_INPUT));
-            for(AudioDeviceInfo i:outputDevices) devices.add(new Device(i,Device.TYPE_OUTPUT));
-            devices.sort((o1, o2) -> Integer.compare(priority(o1.deviceInfo), priority(o2.deviceInfo)));
-        }
-        public static int priority(@NonNull AudioDeviceInfo device){
-            if(device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADPHONES||device.getType()==AudioDeviceInfo.TYPE_WIRED_HEADSET)
-                return 1;
-            if(device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||device.getType()==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
-                return 2;
-            if(deviceIsAttached(device)||device.getType()==AudioDeviceInfo.TYPE_BUILTIN_MIC)    return 3;
-            return 4;
-        }
-        private static boolean deviceIsAttached(Device device){
-            return deviceIsAttached(device.deviceInfo);
-        }
-        public static boolean deviceIsAttached(AudioDeviceInfo deviceInfo){
-            if(deviceInfo==null)    return false;
-            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE||
-                    deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER||
-                    deviceInfo.getType()==AudioDeviceInfo.TYPE_TELEPHONY;
-        }
-
-        private static boolean deviceIsSpeaker(AudioDeviceInfo deviceInfo){
-            if(deviceInfo==null)    return false;
-            return deviceInfo.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
-        }
-        private static boolean deviceIsSpeaker(Device device){
-            return deviceIsSpeaker(device.deviceInfo);
-        }
-        public static boolean deviceIsInput(Device device){
-            return device.type==Device.TYPE_INPUT;
-        }
-        private static boolean deviceIsOutput(Device device){
-            return device.type==Device.TYPE_OUTPUT;
-        }
-    }
     private final DeviceManager deviceManager;
 }
