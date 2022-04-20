@@ -257,10 +257,12 @@ public class Talker {
                 deviceManager.updateDevices(audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS),
                         audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
                 AudioDeviceInfo inPriority = deviceManager.getDevice(DeviceManager::deviceIsInput);
+                checkBlueTooth(inPriority);
                 if(shouldUpdatePreferredIn(inPriority
                         ,audioRecord.getRoutedDevice(),audioRecord.getPreferredDevice()))
                     setInDevice(inPriority);
                 inPriority = deviceManager.getDevice(DeviceManager::deviceIsOutput);
+                checkBlueTooth(inPriority);
                 if(shouldUpdatePreferredOut(inPriority,audioTrack.getRoutedDevice(),audioTrack.getPreferredDevice()))
                     setOutDevice(inPriority);
                 uiHandler.postDelayed(this,1000);
@@ -377,12 +379,12 @@ public class Talker {
     }
     public void setInDevice(AudioDeviceInfo device){
         if(audioRecord==null||device==null)   return;
-        checkBlueTooth(device);
+        //checkBlueTooth(device);
         audioRecord.setPreferredDevice(device);
     }
     public void setOutDevice(AudioDeviceInfo device){
         if(audioTrack==null||device==null)   return;
-        checkBlueTooth(device);
+        //checkBlueTooth(device);
         System.out.println(audioTrack.setPreferredDevice(device));
     }
 
